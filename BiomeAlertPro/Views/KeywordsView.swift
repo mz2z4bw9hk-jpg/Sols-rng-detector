@@ -27,9 +27,13 @@ private struct KeywordsContent: View {
                 if !keywords.isEmpty || category == .custom {
                     Section {
                         ForEach(keywords) { keyword in
-                            KeywordRow(keyword: keyword) { enabled in
-                                store.setEnabled(enabled, id: keyword.id)
-                            }
+                            KeywordRow(
+                                keyword: keyword,
+                                isEnabled: Binding(
+                                    get: { keyword.isEnabled },
+                                    set: { store.setEnabled($0, id: keyword.id) }
+                                )
+                            )
                             .tag(keyword.id)
                         }
                     } header: {
@@ -94,11 +98,11 @@ private struct KeywordsContent: View {
 
 private struct KeywordRow: View {
     let keyword: Keyword
-    let onToggle: @MainActor (Bool) -> Void
+    @Binding var isEnabled: Bool
 
     var body: some View {
         HStack(spacing: 10) {
-            Toggle("", isOn: Binding(get: { keyword.isEnabled }, set: onToggle))
+            Toggle("", isOn: $isEnabled)
                 .toggleStyle(.checkbox)
                 .labelsHidden()
 

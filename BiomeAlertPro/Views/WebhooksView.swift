@@ -58,7 +58,10 @@ private struct WebhooksContent: View {
                     webhook: webhook,
                     isTesting: viewModel.testingID == webhook.id,
                     testResult: viewModel.testResults[webhook.id],
-                    onToggle: { enabled in store.setEnabled(enabled, id: webhook.id) },
+                    isEnabled: Binding(
+                        get: { webhook.isEnabled },
+                        set: { store.setEnabled($0, id: webhook.id) }
+                    ),
                     onTest: { viewModel.runTest(for: webhook) },
                     onEdit: { viewModel.presentEditForm(for: webhook) },
                     onDelete: { store.delete(id: webhook.id) }
@@ -82,7 +85,7 @@ private struct WebhookRow: View {
     let webhook: WebhookConfig
     let isTesting: Bool
     let testResult: String?
-    let onToggle: @MainActor (Bool) -> Void
+    @Binding var isEnabled: Bool
     let onTest: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -90,7 +93,7 @@ private struct WebhookRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
-                Toggle("", isOn: Binding(get: { webhook.isEnabled }, set: onToggle))
+                Toggle("", isOn: $isEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .labelsHidden()
