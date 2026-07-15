@@ -56,11 +56,12 @@ final class HistoryStore: ObservableObject {
 
     func exportCSV() -> String {
         let formatter = ISO8601DateFormatter()
-        var lines = ["timestamp,source,sender,biome,rare,confidence,keywords,roblox_link,link_kind,latency_ms,launch_status,content"]
+        var lines = ["timestamp,source,channel,sender,biome,rare,confidence,keywords,roblox_link,link_kind,latency_ms,launch_status,content"]
         for record in records {
             let fields: [String] = [
                 formatter.string(from: record.date),
                 record.source,
+                record.channel ?? "",
                 record.sender ?? "",
                 record.biome ?? "",
                 record.isRareBiome ? "yes" : "no",

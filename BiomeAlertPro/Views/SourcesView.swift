@@ -55,10 +55,26 @@ private struct SourcesContent: View {
                         }
                     }
 
+                LabeledContent("Ignore links older than") {
+                    HStack {
+                        Slider(value: $settings.screenWatcherMaxAgeMinutes, in: 0...30, step: 1)
+                            .frame(width: 160)
+                            .onChange(of: settings.screenWatcherMaxAgeMinutes) { _, _ in
+                                environment.applyScreenWatcherSetting()
+                            }
+                        Text(settings.screenWatcherMaxAgeMinutes == 0
+                             ? "No limit"
+                             : String(format: "%.0f min", settings.screenWatcherMaxAgeMinutes))
+                            .monospacedDigit()
+                            .frame(width: 66, alignment: .trailing)
+                    }
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Grant Screen Recording when macOS asks (System Settings → Privacy & Security → Screen Recording), then relaunch the app.", systemImage: "1.circle")
                     Label("Keep Discord open with the alert channel visible — behind other windows is fine, minimized is not.", systemImage: "2.circle")
                     Label("Choose which biomes auto-launch in Settings → Auto-Launch Biomes.", systemImage: "3.circle")
+                    Label("On startup, links already on screen are ignored — only new drops launch, and each link is joined once.", systemImage: "checkmark.shield")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -171,6 +187,19 @@ private struct SourcesContent: View {
 
                 if let info = viewModel.infoMessage {
                     Text(info).font(.caption).foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Channels to watch", systemImage: "number")
+                        .font(.callout.weight(.medium))
+                    TextField("glitched-snipes, dreamspace-snipes, singularity-snipes", text: $settings.channelAllowList)
+                        .textFieldStyle(.roundedBorder)
+                    Text("The bot sees every channel it has access to at once — no switching needed. List the channel names here (comma-separated) to act only on those; leave blank to watch all of them. Each alert is tagged with its channel in Alert History.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(6)

@@ -50,6 +50,9 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate, @un
         }
 
         var subtitleParts = ["via \(record.source)"]
+        if let channel = record.channel, !channel.isEmpty {
+            subtitleParts.append("#\(channel)")
+        }
         if let sender = record.sender, !sender.isEmpty {
             subtitleParts.append("from \(sender)")
         }

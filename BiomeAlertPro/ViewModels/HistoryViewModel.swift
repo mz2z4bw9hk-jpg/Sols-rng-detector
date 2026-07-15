@@ -44,6 +44,7 @@ final class HistoryViewModel: ObservableObject {
                 record.content.lowercased().contains(query)
                     || (record.biome?.lowercased().contains(query) ?? false)
                     || (record.sender?.lowercased().contains(query) ?? false)
+                    || (record.channel?.lowercased().contains(query) ?? false)
                     || record.source.lowercased().contains(query)
                     || record.matchedKeywords.contains { $0.lowercased().contains(query) }
             }

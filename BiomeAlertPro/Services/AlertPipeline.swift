@@ -9,6 +9,9 @@ struct DetectionConfiguration: Sendable {
     let duplicateCooldown: TimeInterval
     let cacheDuration: TimeInterval
     let fuzzyEnabled: Bool
+    /// Normalized channel names to accept (empty = all). Applies to sources
+    /// that report a channel, such as the Discord bot.
+    let allowedChannels: Set<String>
 }
 
 /// Background processing stage: consumes normalized incoming events from all
@@ -52,6 +55,14 @@ actor AlertPipeline {
     /// Processes one event end-to-end.
     func ingest(_ event: IncomingEvent) async {
         let config = await environment.detectionConfiguration()
+
+        // Channel allow-list: for sources that report a channel (the bot),
+        // ignore anything outside the user's chosen channels.
+        if !config.allowedChannels.isEmpty, let channel = event.channel,
+           !config.allowedChannels.contains(channel.lowercased()) {
+            await environment.logPipeline(.debug, "Ignored message from #\(channel) (not in channel list)")
+            return
+        }
 
         // Expire dedupe cache entries.
         let now = Date()
@@ -104,6 +115,7 @@ actor AlertPipeline {
         let record = AlertRecord(
             source: event.source.displayName,
             sender: event.sender,
+            channel: event.channel,
             content: String(event.fullText.prefix(500)),
             matchedKeywords: detection.matchedKeywordTexts,
             biome: detection.biomeCategory?.displayName,

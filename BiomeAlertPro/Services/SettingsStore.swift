@@ -58,6 +58,16 @@ final class SettingsStore: ObservableObject {
     @Published var screenWatcherEnabled: Bool { didSet { defaults.set(screenWatcherEnabled, forKey: "screenWatcherEnabled") } }
     /// Raw values of `KeywordCategory` biomes that may auto-launch Roblox.
     @Published var autoLaunchBiomes: [String] { didSet { defaults.set(autoLaunchBiomes, forKey: "autoLaunchBiomes") } }
+    /// Skip on-screen links whose "N minutes ago" timestamp exceeds this. 0 = no age limit.
+    @Published var screenWatcherMaxAgeMinutes: Double { didSet { defaults.set(screenWatcherMaxAgeMinutes, forKey: "screenWatcherMaxAgeMinutes") } }
+
+    // MARK: - Channels
+    /// Comma-separated Discord channel names the bot should act on. Empty = all channels.
+    @Published var channelAllowList: String { didSet { defaults.set(channelAllowList, forKey: "channelAllowList") } }
+
+    // MARK: - Forwarding
+    /// Prepend @everyone (and allow the mention) when forwarding alerts to webhooks.
+    @Published var pingEveryoneOnForward: Bool { didSet { defaults.set(pingEveryoneOnForward, forKey: "pingEveryoneOnForward") } }
 
     // MARK: - Discord
     @Published var discordClientID: String { didSet { defaults.set(discordClientID, forKey: "discordClientID") } }
@@ -97,6 +107,9 @@ final class SettingsStore: ObservableObject {
             "listenerAllowLAN": false,
             "screenWatcherEnabled": false,
             "autoLaunchBiomes": KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue),
+            "screenWatcherMaxAgeMinutes": 3.0,
+            "channelAllowList": "",
+            "pingEveryoneOnForward": false,
             "discordClientID": "",
             "forwardAlertsToWebhooks": false,
             "theme": AppTheme.system.rawValue,
@@ -124,6 +137,9 @@ final class SettingsStore: ObservableObject {
         screenWatcherEnabled = defaults.bool(forKey: "screenWatcherEnabled")
         autoLaunchBiomes = defaults.stringArray(forKey: "autoLaunchBiomes")
             ?? KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue)
+        screenWatcherMaxAgeMinutes = defaults.double(forKey: "screenWatcherMaxAgeMinutes")
+        channelAllowList = defaults.string(forKey: "channelAllowList") ?? ""
+        pingEveryoneOnForward = defaults.bool(forKey: "pingEveryoneOnForward")
         discordClientID = defaults.string(forKey: "discordClientID") ?? ""
         forwardAlertsToWebhooks = defaults.bool(forKey: "forwardAlertsToWebhooks")
         theme = AppTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .system
@@ -148,5 +164,24 @@ final class SettingsStore: ObservableObject {
             set.remove(category.rawValue)
         }
         autoLaunchBiomes = set.sorted()
+    }
+
+    // MARK: - Channel allow-list helpers
+
+    /// Normalized channel names (lowercase, no leading '#'). Empty = allow all.
+    var allowedChannels: Set<String> {
+        Set(channelAllowList
+            .split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 }
+            .filter { !$0.isEmpty })
+    }
+
+    /// Whether an alert from `channel` is permitted by the allow-list.
+    func isChannelAllowed(_ channel: String?) -> Bool {
+        let allowed = allowedChannels
+        guard !allowed.isEmpty else { return true }
+        guard let channel else { return true } // sources without channel info aren't filtered
+        return allowed.contains(channel.lowercased())
     }
 }

@@ -35,6 +35,8 @@ struct AlertRecord: Codable, Identifiable, Hashable, Sendable {
     let date: Date
     let source: String
     let sender: String?
+    /// Originating Discord channel name, when known.
+    var channel: String?
     /// Message excerpt that triggered the alert.
     let content: String
     let matchedKeywords: [String]
@@ -54,6 +56,7 @@ struct AlertRecord: Codable, Identifiable, Hashable, Sendable {
         date: Date = Date(),
         source: String,
         sender: String?,
+        channel: String? = nil,
         content: String,
         matchedKeywords: [String],
         biome: String?,
@@ -68,6 +71,7 @@ struct AlertRecord: Codable, Identifiable, Hashable, Sendable {
         self.date = date
         self.source = source
         self.sender = sender
+        self.channel = channel
         self.content = content
         self.matchedKeywords = matchedKeywords
         self.biome = biome

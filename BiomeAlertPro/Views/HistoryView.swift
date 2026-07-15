@@ -85,6 +85,13 @@ private struct HistoryContent: View {
             TableColumn("Source", value: \.source)
                 .width(min: 90, ideal: 120)
 
+            TableColumn("Channel") { record in
+                Text(record.channel.map { "#\($0)" } ?? "—")
+                    .foregroundStyle(record.channel == nil ? .tertiary : .secondary)
+                    .lineLimit(1)
+            }
+            .width(min: 80, ideal: 120)
+
             TableColumn("Keywords") { record in
                 Text(record.matchedKeywords.joined(separator: ", "))
                     .lineLimit(1)

@@ -56,16 +56,37 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
 
     // Accessed only on `sampleQueue`.
     private var lastFrameHash = 0
-    private var seenLinks: [String: Date] = [:]
+    /// Links already handled this session — a link is joined once and never
+    /// again while the app runs. Capped to avoid unbounded growth.
+    private var seenLinks: Set<String> = []
+    private var seenOrder: [String] = []
+    /// First OCR pass "primes" the seen set from whatever is already on screen
+    /// so startup never joins an old link; only links appearing afterward act.
+    private var hasPrimed = false
     private let linkDetector = RobloxLinkDetector()
 
-    /// How long an on-screen link stays deduplicated (it remains visible in
-    /// the chat for a long time, so this must be generous).
-    private static let seenLinkTTL: TimeInterval = 900
+    /// Configurable max on-screen age; links whose nearby "N minutes ago"
+    /// timestamp exceeds this are skipped. 0 disables the age check.
+    private var maxAgeMinutes: Double = 0
+
+    private static let maxSeenLinks = 800
 
     private static let discordBundleIDs: Set<String> = [
         "com.hnc.discord", "com.hnc.discordptb", "com.hnc.discordcanary"
     ]
+
+    /// Sets the freshness limit (thread-safe; read on the sampler queue).
+    func setMaxLinkAgeMinutes(_ minutes: Double) {
+        lock.lock()
+        maxAgeMinutes = minutes
+        lock.unlock()
+    }
+
+    private func currentMaxAgeMinutes() -> Double {
+        lock.lock()
+        defer { lock.unlock() }
+        return maxAgeMinutes
+    }
 
     override init() {
         (events, eventContinuation) = AsyncStream.makeStream(of: IncomingEvent.self)
@@ -167,6 +188,11 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         try await newStream.startCapture()
 
         storeStream(newStream)
+        // Re-prime for the new capture so links already visible aren't joined.
+        sampleQueue.async { [weak self] in
+            self?.hasPrimed = false
+            self?.lastFrameHash = 0
+        }
     }
 
     /// Synchronous helper so async code never touches the lock directly
@@ -242,13 +268,33 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
             links.append(link)
         }
 
-        let now = Date()
-        seenLinks = seenLinks.filter { now.timeIntervalSince($0.value) < Self.seenLinkTTL }
-        let fresh = links.filter { $0.isJoinable && seenLinks[$0.dedupeKey] == nil }
-        guard !fresh.isEmpty else { return }
-        for link in fresh {
-            seenLinks[link.dedupeKey] = now
+        let candidates = links.filter { $0.isJoinable && !seenLinks.contains($0.dedupeKey) }
+        guard !candidates.isEmpty else { return }
+
+        // Prime on the first pass: everything already on screen is recorded as
+        // seen but never joined — only links that appear later are acted on.
+        if !hasPrimed {
+            hasPrimed = true
+            candidates.forEach { markSeen($0.dedupeKey) }
+            onLog?(.info, "Screen watcher ready — \(candidates.count) link(s) already on screen were ignored; only new drops will launch")
+            return
         }
+
+        // Freshness filter: skip links whose nearby "N minutes ago" timestamp
+        // is older than the configured limit (guards against scrolled-up
+        // history). Links with no readable timestamp are treated as fresh.
+        let maxAge = currentMaxAgeMinutes()
+        var fresh: [RobloxLink] = []
+        for link in candidates {
+            if maxAge > 0, let age = Self.nearestAgeMinutes(for: link, lines: lines), age > maxAge {
+                markSeen(link.dedupeKey)
+                onLog?(.debug, "Skipped a ~\(Int(age))-min-old link (older than the \(Int(maxAge))-min limit)")
+                continue
+            }
+            fresh.append(link)
+        }
+        guard !fresh.isEmpty else { return }
+        fresh.forEach { markSeen($0.dedupeKey) }
 
         // Context lines around the link let the keyword engine classify the
         // biome; the reassembled links are appended verbatim so detection
@@ -263,6 +309,62 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         ))
         onLog?(.info, "Screen watcher spotted \(fresh.count) new Roblox link(s)")
     }
+
+    /// Records a link as handled, evicting the oldest entries past the cap.
+    private func markSeen(_ key: String) {
+        guard seenLinks.insert(key).inserted else { return }
+        seenOrder.append(key)
+        if seenOrder.count > Self.maxSeenLinks {
+            let drop = seenOrder.removeFirst()
+            seenLinks.remove(drop)
+        }
+    }
+
+    /// Finds the smallest relative age (in minutes) mentioned near a link.
+    static func nearestAgeMinutes(for link: RobloxLink, lines: [String]) -> Double? {
+        let needle = link.linkCode ?? link.placeID ?? ""
+        let anchor = lines.firstIndex { !needle.isEmpty && $0.contains(needle) }
+            ?? lines.firstIndex { $0.lowercased().contains("roblox.com") }
+        let range: Range<Int>
+        if let anchor {
+            range = max(0, anchor - 8)..<min(lines.count, anchor + 3)
+        } else {
+            range = 0..<lines.count
+        }
+        var smallest: Double?
+        for line in lines[range] {
+            if let age = parseRelativeAgeMinutes(line) {
+                smallest = min(smallest ?? age, age)
+            }
+        }
+        return smallest
+    }
+
+    /// Parses Discord-style relative timestamps ("8 minutes ago", "just now",
+    /// "an hour ago") into minutes. Returns nil when no timestamp is present.
+    static func parseRelativeAgeMinutes(_ line: String) -> Double? {
+        let text = line.lowercased()
+        if text.contains("just now") || text.contains("seconds ago")
+            || text.contains("moments ago") || text.contains("a few seconds") {
+            return 0
+        }
+        if text.contains("a minute ago") || text.contains("an minute ago") { return 1 }
+        if text.contains("an hour ago") || text.contains("a hour ago") { return 60 }
+        if text.contains("a day ago") || text.contains("yesterday") { return 1_440 }
+
+        guard let match = text.firstMatch(of: relativeAgeRegex) else { return nil }
+        guard let value = Double(String(match.output.1)) else { return nil }
+        let unit = String(match.output.2)
+        if unit.hasPrefix("sec") { return value / 60 }
+        if unit.hasPrefix("min") { return value }
+        if unit.hasPrefix("hour") || unit.hasPrefix("hr") { return value * 60 }
+        if unit.hasPrefix("day") { return value * 1_440 }
+        return nil
+    }
+
+    nonisolated(unsafe) private static let relativeAgeRegex =
+        #/(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\s*ago/#
+        .ignoresCase()
 
     private static func contextText(lines: [String]) -> String {
         if let index = lines.firstIndex(where: {

@@ -32,6 +32,8 @@ struct IncomingEvent: Sendable {
     let id: String?
     let source: EventSource
     let sender: String?
+    /// Originating Discord channel name (e.g. "glitched-snipes"), when known.
+    let channel: String?
     /// Primary message content.
     let content: String
     /// Flattened text extracted from embeds (titles, descriptions, fields, URLs).
@@ -43,6 +45,7 @@ struct IncomingEvent: Sendable {
         id: String? = nil,
         source: EventSource,
         sender: String? = nil,
+        channel: String? = nil,
         content: String,
         embedText: String = "",
         receivedAt: Date = Date()
@@ -50,6 +53,7 @@ struct IncomingEvent: Sendable {
         self.id = id
         self.source = source
         self.sender = sender
+        self.channel = channel
         self.content = content
         self.embedText = embedText
         self.receivedAt = receivedAt

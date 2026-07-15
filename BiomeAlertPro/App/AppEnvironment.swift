@@ -202,6 +202,7 @@ final class AppEnvironment: ObservableObject {
             Task { await gateway.start(token: token) }
         }
         if settings.screenWatcherEnabled {
+            screenWatcher.setMaxLinkAgeMinutes(settings.screenWatcherMaxAgeMinutes)
             screenWatcher.start()
         }
     }
@@ -216,6 +217,7 @@ final class AppEnvironment: ObservableObject {
 
     /// Applies the screen-watcher toggle immediately while monitoring.
     func applyScreenWatcherSetting() {
+        screenWatcher.setMaxLinkAgeMinutes(settings.screenWatcherMaxAgeMinutes)
         guard isMonitoring else { return }
         if settings.screenWatcherEnabled {
             screenWatcher.start()
@@ -284,7 +286,8 @@ final class AppEnvironment: ObservableObject {
             confidenceThreshold: settings.confidenceThreshold,
             duplicateCooldown: settings.duplicateCooldownSeconds,
             cacheDuration: settings.cacheDurationMinutes * 60,
-            fuzzyEnabled: settings.fuzzyMatchingEnabled
+            fuzzyEnabled: settings.fuzzyMatchingEnabled,
+            allowedChannels: settings.allowedChannels
         )
     }
 
@@ -313,7 +316,7 @@ final class AppEnvironment: ObservableObject {
         }
 
         if settings.forwardAlertsToWebhooks {
-            let message = Self.forwardMessage(for: record)
+            let message = Self.forwardMessage(for: record, pingEveryone: settings.pingEveryoneOnForward)
             Task { await webhooks.broadcast(message: message) }
         }
 
@@ -395,14 +398,21 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    private static func forwardMessage(for record: AlertRecord) -> String {
+    private static func forwardMessage(for record: AlertRecord, pingEveryone: Bool) -> String {
         var parts: [String] = []
+        if pingEveryone {
+            parts.append("@everyone")
+        }
         if let biome = record.biome {
             parts.append(record.isRareBiome ? "🌌 **\(biome)** detected!" : "**\(biome)** detected")
         } else {
             parts.append("🔔 Alert detected")
         }
-        parts.append("Source: \(record.source)")
+        var origin = "Source: \(record.source)"
+        if let channel = record.channel {
+            origin += " · #\(channel)"
+        }
+        parts.append(origin)
         if let link = record.robloxLink {
             parts.append(link)
         }

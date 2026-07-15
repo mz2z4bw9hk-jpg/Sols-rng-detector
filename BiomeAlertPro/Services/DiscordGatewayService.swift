@@ -46,6 +46,9 @@ actor DiscordGatewayService {
     private var sessionID: String?
     private var resumeGatewayURL: String?
     private var reconnectAttempt = 0
+    /// channel_id → channel name, learned from GUILD_CREATE payloads so
+    /// MESSAGE_CREATE events can be labeled with a human-readable channel.
+    private var channelNames: [String: String] = [:]
 
     private var statusHandler: (@Sendable (GatewayStatus) -> Void)?
     private var logHandler: (@Sendable (LogLevel, String) -> Void)?
@@ -203,6 +206,22 @@ actor DiscordGatewayService {
             case "RESUMED":
                 reconnectAttempt = 0
                 logHandler?(.info, "Gateway session resumed")
+            case "GUILD_CREATE":
+                // Full guild payload includes every channel — cache their names
+                // so messages can be labeled with a readable channel.
+                if let channels = eventData?["channels"] as? [[String: Any]] {
+                    var learned = 0
+                    for channel in channels {
+                        if let id = channel["id"] as? String, let name = channel["name"] as? String {
+                            channelNames[id] = name
+                            learned += 1
+                        }
+                    }
+                    if learned > 0 {
+                        let guildName = (eventData?["name"] as? String) ?? "guild"
+                        logHandler?(.debug, "Learned \(learned) channel name(s) in \(guildName)")
+                    }
+                }
             case "MESSAGE_CREATE":
                 if let eventData {
                     emitMessage(eventData)
@@ -258,10 +277,12 @@ actor DiscordGatewayService {
         guard !content.isEmpty || !embedText.isEmpty else { return }
 
         let sender = (message["author"] as? [String: Any])?["username"] as? String
+        let channel = (message["channel_id"] as? String).flatMap { channelNames[$0] }
         eventContinuation.yield(IncomingEvent(
             id: message["id"] as? String,
             source: .discordBot,
             sender: sender,
+            channel: channel,
             content: content,
             embedText: embedText
         ))

@@ -52,10 +52,24 @@ URL. Read-only, 100% local, never automates your Discord account.
    channel). The window can sit behind other windows — just don't minimize it.
 4. Pick which biomes may auto-launch under **Settings → Auto-Launch Biomes**.
 
+**Only-new-links safety (important):**
+- **Priming** — when the watcher starts, every link already on screen is
+  recorded as "seen" and never joined. Only links that appear *after* it
+  starts will launch Roblox. Opening the app on a channel full of old alerts
+  will not yank you into a dead server.
+- **Freshness limit** — Sources → Screen Watcher → *Ignore links older than*
+  (default 3 min) skips links whose "N minutes ago" timestamp is over the
+  limit, which also covers scrolling up into old history.
+- **Join-once** — each unique link is launched a single time per session and
+  never re-clicked, even while it stays on screen.
+
 Notes:
 - Only Discord app windows are captured — never the whole screen.
 - Frames are OCR'd only when the window content changes (~2 checks/second),
   so detection typically lands within a second of the message appearing.
+- The watcher reads the channel you're *looking at*. To cover several
+  channels at once (glitched-snipes, dreamspace-snipes, …) without switching,
+  use the bot below — it sees every channel simultaneously.
 - Long private-server codes are OCR'd at 2× resolution with language
   correction disabled; wrapped URLs are reassembled automatically. OCR can
   still occasionally misread a character — the bot/webhook sources are
@@ -81,6 +95,15 @@ Discord's supported mechanism for reading channel messages is a **bot**:
 The app connects to the official Gateway (v10), heartbeats, resumes dropped
 sessions, and reconnects automatically with exponential backoff. Messages
 from every channel the bot can see flow through the keyword engine.
+
+**Watching multiple channels at once:** the bot sees *all* channels it has
+access to simultaneously — no switching, no clicking. In **Sources → Discord
+Bot → Channels to watch**, list the channel names you care about
+(`glitched-snipes, dreamspace-snipes, cyberspace-snipes, singularity-snipes`)
+to act only on those; leave it blank to watch every channel. Each alert is
+tagged with the channel it came from in **Alert History** and in the
+notification, and only-new/join-once dedupe applies here too (by Discord
+message ID), so old messages are never re-joined.
 
 > Only add the bot to servers whose owners are fine with it — the same rule
 > as any Discord bot.
@@ -112,6 +135,10 @@ To re-broadcast detected alerts into your own Discord channels:
    and honor Discord rate limits.
 4. Toggle **Forward detected alerts to all enabled webhooks** at the bottom
    of the Webhooks screen.
+5. Optionally enable **Ping @everyone in forwarded alerts**. The mention only
+   fires in *your* server (where the webhook posts and where you have
+   permission to mention everyone) — it never pings the server you're
+   watching. Requires the forwarding toggle to be on.
 
 ## 5. Roblox launching
 

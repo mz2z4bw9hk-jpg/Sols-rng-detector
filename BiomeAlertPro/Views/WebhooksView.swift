@@ -72,11 +72,16 @@ private struct WebhooksContent: View {
     }
 
     private var forwardingFooter: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
             Divider()
             Toggle("Forward detected alerts to all enabled webhooks", isOn: $settings.forwardAlertsToWebhooks)
-                .padding(12)
+            Toggle("Ping @everyone in forwarded alerts", isOn: $settings.pingEveryoneOnForward)
+                .disabled(!settings.forwardAlertsToWebhooks)
+            Text("@everyone only pings in a server where you have permission to mention everyone, and only fires in channels your webhook posts to — never in the server you're watching.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .padding(12)
         .background(.bar)
     }
 }

@@ -69,8 +69,13 @@ actor DiscordWebhookClient: WebhookSending {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["content": String(content.prefix(1_900))]
-        request.httpBody = try JSONEncoder().encode(body)
+        // allowed_mentions must explicitly permit @everyone/roles/users for the
+        // ping to fire; without it Discord suppresses mentions from webhooks.
+        let body: [String: Any] = [
+            "content": String(content.prefix(1_900)),
+            "allowed_mentions": ["parse": ["everyone", "roles", "users"]]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         var lastError: Error = WebhookError.network("unknown")
         for attempt in 0..<maxAttempts {
