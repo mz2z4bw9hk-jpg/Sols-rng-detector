@@ -166,6 +166,12 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         try newStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
         try await newStream.startCapture()
 
+        storeStream(newStream)
+    }
+
+    /// Synchronous helper so async code never touches the lock directly
+    /// (NSLock.lock/unlock are unavailable from async contexts in Swift 6).
+    private func storeStream(_ newStream: SCStream?) {
         lock.lock()
         stream = newStream
         lock.unlock()
