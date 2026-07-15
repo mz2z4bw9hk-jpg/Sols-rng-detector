@@ -23,12 +23,43 @@ private struct SettingsContent: View {
         Form {
             notificationsSection
             robloxSection
+            biomeLaunchSection
             detectionSection
             appearanceSection
             performanceSection
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
+    }
+
+    private var biomeLaunchSection: some View {
+        Section {
+            ForEach(KeywordCategory.allCases.filter(\.isBiome)) { category in
+                Toggle(isOn: Binding(
+                    get: { settings.isBiomeAutoLaunchEnabled(category) },
+                    set: { enabled in settings.setBiomeAutoLaunch(category, enabled: enabled) }
+                )) {
+                    Label {
+                        HStack(spacing: 6) {
+                            Text(category.displayName)
+                            if category.isRare {
+                                Text("RARE")
+                                    .font(.caption2.weight(.bold))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(.purple.opacity(0.25), in: Capsule())
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: category.symbolName)
+                    }
+                }
+            }
+        } header: {
+            Text("Auto-Launch Biomes")
+        } footer: {
+            Text("Roblox launches automatically only for links tied to the biomes selected here. Alerts with a link but no recognized biome follow the master auto-launch switch.")
+        }
     }
 
     // MARK: - Sections

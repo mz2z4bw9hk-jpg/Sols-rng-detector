@@ -54,6 +54,11 @@ final class SettingsStore: ObservableObject {
     @Published var listenerPort: Int { didSet { defaults.set(listenerPort, forKey: "listenerPort") } }
     @Published var listenerAllowLAN: Bool { didSet { defaults.set(listenerAllowLAN, forKey: "listenerAllowLAN") } }
 
+    // MARK: - Screen watcher
+    @Published var screenWatcherEnabled: Bool { didSet { defaults.set(screenWatcherEnabled, forKey: "screenWatcherEnabled") } }
+    /// Raw values of `KeywordCategory` biomes that may auto-launch Roblox.
+    @Published var autoLaunchBiomes: [String] { didSet { defaults.set(autoLaunchBiomes, forKey: "autoLaunchBiomes") } }
+
     // MARK: - Discord
     @Published var discordClientID: String { didSet { defaults.set(discordClientID, forKey: "discordClientID") } }
     @Published var forwardAlertsToWebhooks: Bool { didSet { defaults.set(forwardAlertsToWebhooks, forKey: "forwardAlertsToWebhooks") } }
@@ -90,6 +95,8 @@ final class SettingsStore: ObservableObject {
             "listenerEnabled": true,
             "listenerPort": 8787,
             "listenerAllowLAN": false,
+            "screenWatcherEnabled": false,
+            "autoLaunchBiomes": KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue),
             "discordClientID": "",
             "forwardAlertsToWebhooks": false,
             "theme": AppTheme.system.rawValue,
@@ -114,6 +121,9 @@ final class SettingsStore: ObservableObject {
         listenerEnabled = defaults.bool(forKey: "listenerEnabled")
         listenerPort = defaults.integer(forKey: "listenerPort")
         listenerAllowLAN = defaults.bool(forKey: "listenerAllowLAN")
+        screenWatcherEnabled = defaults.bool(forKey: "screenWatcherEnabled")
+        autoLaunchBiomes = defaults.stringArray(forKey: "autoLaunchBiomes")
+            ?? KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue)
         discordClientID = defaults.string(forKey: "discordClientID") ?? ""
         forwardAlertsToWebhooks = defaults.bool(forKey: "forwardAlertsToWebhooks")
         theme = AppTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .system
@@ -122,5 +132,21 @@ final class SettingsStore: ObservableObject {
         cpuLimitPercent = defaults.double(forKey: "cpuLimitPercent")
         loggingLevel = LogLevel(rawValue: defaults.string(forKey: "loggingLevel") ?? "") ?? .info
         historyLimit = defaults.integer(forKey: "historyLimit")
+    }
+
+    // MARK: - Auto-launch biome helpers
+
+    func isBiomeAutoLaunchEnabled(_ category: KeywordCategory) -> Bool {
+        autoLaunchBiomes.contains(category.rawValue)
+    }
+
+    func setBiomeAutoLaunch(_ category: KeywordCategory, enabled: Bool) {
+        var set = Set(autoLaunchBiomes)
+        if enabled {
+            set.insert(category.rawValue)
+        } else {
+            set.remove(category.rawValue)
+        }
+        autoLaunchBiomes = set.sorted()
     }
 }

@@ -65,6 +65,11 @@ private struct DashboardContent: View {
                 )
                 Divider()
                 statusRow(
+                    title: "Screen Watcher",
+                    badge: StatusBadge(kind: screenWatcherBadgeKind, text: environment.screenWatcherState.displayName)
+                )
+                Divider()
+                statusRow(
                     title: "Discord Bot",
                     badge: StatusBadge(kind: gatewayBadgeKind, text: environment.gatewayStatus.displayName)
                 )
@@ -115,6 +120,15 @@ private struct DashboardContent: View {
         case .connecting, .reconnecting: return .warning
         case .failed: return .error
         case .disconnected: return .neutral
+        }
+    }
+
+    private var screenWatcherBadgeKind: StatusBadge.Kind {
+        switch environment.screenWatcherState {
+        case .watching: return .ok
+        case .waitingForDiscord: return .warning
+        case .failed: return .error
+        case .stopped: return .neutral
         }
     }
 
@@ -187,6 +201,7 @@ private struct DashboardContent: View {
         var count = 0
         if environment.listenerState.isActive { count += 1 }
         if environment.gatewayStatus.isConnected { count += 1 }
+        if environment.screenWatcherState.isActive { count += 1 }
         return count
     }
 

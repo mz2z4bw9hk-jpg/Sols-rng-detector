@@ -82,7 +82,7 @@ private struct WebhookRow: View {
     let webhook: WebhookConfig
     let isTesting: Bool
     let testResult: String?
-    let onToggle: (Bool) -> Void
+    let onToggle: @MainActor (Bool) -> Void
     let onTest: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void

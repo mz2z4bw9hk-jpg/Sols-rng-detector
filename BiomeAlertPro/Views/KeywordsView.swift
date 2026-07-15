@@ -94,7 +94,7 @@ private struct KeywordsContent: View {
 
 private struct KeywordRow: View {
     let keyword: Keyword
-    let onToggle: (Bool) -> Void
+    let onToggle: @MainActor (Bool) -> Void
 
     var body: some View {
         HStack(spacing: 10) {

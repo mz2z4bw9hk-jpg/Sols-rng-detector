@@ -4,12 +4,14 @@ import Foundation
 enum EventSource: String, Codable, CaseIterable, Sendable {
     case webhookListener
     case discordBot
+    case screenOCR
     case manualTest
 
     var displayName: String {
         switch self {
         case .webhookListener: return "Webhook Listener"
         case .discordBot: return "Discord Bot"
+        case .screenOCR: return "Screen Watcher"
         case .manualTest: return "Manual Test"
         }
     }
@@ -18,6 +20,7 @@ enum EventSource: String, Codable, CaseIterable, Sendable {
         switch self {
         case .webhookListener: return "antenna.radiowaves.left.and.right"
         case .discordBot: return "bubble.left.and.bubble.right.fill"
+        case .screenOCR: return "eye.fill"
         case .manualTest: return "hammer.fill"
         }
     }

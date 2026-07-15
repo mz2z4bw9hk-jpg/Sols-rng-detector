@@ -22,6 +22,7 @@ final class AppEnvironment: ObservableObject {
     let sounds: SoundPlayer
     let listener: WebhookListenerService
     let gateway: DiscordGatewayService
+    let screenWatcher: ScreenWatcherService
 
     private var pipeline: AlertPipeline?
     private var bootstrapped = false
@@ -31,6 +32,7 @@ final class AppEnvironment: ObservableObject {
     @Published var isMonitoring = false
     @Published var listenerState: ListenerState = .stopped
     @Published var gatewayStatus: GatewayStatus = .disconnected
+    @Published var screenWatcherState: ScreenWatcherState = .stopped
     @Published var notificationsAuthorized = false
     @Published var botTokenConfigured = false
 
@@ -62,6 +64,7 @@ final class AppEnvironment: ObservableObject {
         self.sounds = SoundPlayer()
         self.listener = WebhookListenerService()
         self.gateway = DiscordGatewayService()
+        self.screenWatcher = ScreenWatcherService()
 
         logs.minimumLevel = settings.loggingLevel
         history.limit = settings.historyLimit
@@ -75,12 +78,18 @@ final class AppEnvironment: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// One-time startup: wires callbacks, starts the pipeline and any enabled
-    /// sources. Safe to call repeatedly.
+    /// One-time startup. Safe to call repeatedly. The real work is deferred
+    /// one runloop turn so published state never mutates inside a SwiftUI
+    /// view update (callers may be in `.task`/`onAppear`).
     func bootstrap() {
         guard !bootstrapped else { return }
         bootstrapped = true
+        Task { @MainActor [weak self] in
+            self?.performBootstrap()
+        }
+    }
 
+    private func performBootstrap() {
         logs.log(.info, .lifecycle, "Biome Alert Pro \(appVersion) starting up")
 
         // Pipeline consumes every source stream.
@@ -88,20 +97,19 @@ final class AppEnvironment: ObservableObject {
         self.pipeline = pipeline
         let listenerEvents = listener.events
         let gatewayEvents = gateway.events
+        let screenEvents = screenWatcher.events
         Task {
             await pipeline.consume(listenerEvents)
             await pipeline.consume(gatewayEvents)
+            await pipeline.consume(screenEvents)
         }
 
         // Listener state → published UI state.
         listener.onState = { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
-                let wasActive = self.listenerState.isActive
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    self.listenerState = state
-                }
-                if case .failed(let message) = state, wasActive || !message.isEmpty {
+                self.listenerState = state
+                if case .failed(let message) = state {
                     self.logs.log(.error, .network, "Listener: \(message)")
                 }
             }
@@ -112,15 +120,24 @@ final class AppEnvironment: ObservableObject {
             }
         }
 
+        // Screen watcher callbacks.
+        screenWatcher.onState = { [weak self] state in
+            Task { @MainActor in
+                self?.screenWatcherState = state
+            }
+        }
+        screenWatcher.onLog = { [weak self] level, message in
+            Task { @MainActor in
+                self?.logs.log(level, .detection, message)
+            }
+        }
+
         // Gateway callbacks.
         Task {
             await gateway.setHandlers(
                 status: { [weak self] status in
                     Task { @MainActor in
-                        guard let self else { return }
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            self.gatewayStatus = status
-                        }
+                        self?.gatewayStatus = status
                     }
                 },
                 log: { [weak self] level, message in
@@ -155,7 +172,7 @@ final class AppEnvironment: ObservableObject {
         }
         performance.start()
 
-        if settings.listenerEnabled || botTokenConfigured {
+        if settings.listenerEnabled || botTokenConfigured || settings.screenWatcherEnabled {
             startMonitoring()
         }
         applyActivationPolicy()
@@ -184,13 +201,27 @@ final class AppEnvironment: ObservableObject {
         if botTokenConfigured, let token = (try? secrets.secret(for: Self.botTokenKeychainKey)) ?? nil {
             Task { await gateway.start(token: token) }
         }
+        if settings.screenWatcherEnabled {
+            screenWatcher.start()
+        }
     }
 
     func stopMonitoring() {
         isMonitoring = false
         listener.stop()
+        screenWatcher.stop()
         Task { await gateway.stop() }
         logs.log(.info, .lifecycle, "Monitoring stopped")
+    }
+
+    /// Applies the screen-watcher toggle immediately while monitoring.
+    func applyScreenWatcherSetting() {
+        guard isMonitoring else { return }
+        if settings.screenWatcherEnabled {
+            screenWatcher.start()
+        } else {
+            screenWatcher.stop()
+        }
     }
 
     /// Applies listener setting changes by restarting the endpoint.
@@ -288,11 +319,7 @@ final class AppEnvironment: ObservableObject {
 
         // Auto-launch Roblox for joinable links.
         if let link, link.isJoinable {
-            if !settings.autoLaunchRoblox {
-                history.updateLaunchStatus(id: record.id, status: .disabled)
-            } else if settings.launchOnlyForRareBiomes && !record.isRareBiome {
-                history.updateLaunchStatus(id: record.id, status: .disabled)
-            } else {
+            if shouldAutoLaunch(record: record) {
                 let delay = settings.launchDelaySeconds
                 Task { [weak self] in
                     if delay > 0 {
@@ -300,8 +327,22 @@ final class AppEnvironment: ObservableObject {
                     }
                     self?.performLaunch(recordID: record.id, link: link)
                 }
+            } else {
+                history.updateLaunchStatus(id: record.id, status: .disabled)
             }
         }
+    }
+
+    /// Launch policy: master switch → rare-only filter → per-biome selection.
+    /// Alerts without a recognized biome (bare links) follow the master switch.
+    private func shouldAutoLaunch(record: AlertRecord) -> Bool {
+        guard settings.autoLaunchRoblox else { return false }
+        if settings.launchOnlyForRareBiomes && !record.isRareBiome { return false }
+        if let biome = record.biome,
+           let category = KeywordCategory.allCases.first(where: { $0.displayName == biome }) {
+            return settings.isBiomeAutoLaunchEnabled(category)
+        }
+        return true
     }
 
     private func performLaunch(recordID: UUID?, link: RobloxLink) {
@@ -348,7 +389,10 @@ final class AppEnvironment: ObservableObject {
     // MARK: - Appearance
 
     func applyActivationPolicy() {
-        _ = NSApplication.shared.setActivationPolicy(settings.menuBarOnly ? .accessory : .regular)
+        let desired: NSApplication.ActivationPolicy = settings.menuBarOnly ? .accessory : .regular
+        if NSApplication.shared.activationPolicy() != desired {
+            _ = NSApplication.shared.setActivationPolicy(desired)
+        }
     }
 
     private static func forwardMessage(for record: AlertRecord) -> String {

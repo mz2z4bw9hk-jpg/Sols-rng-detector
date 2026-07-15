@@ -26,6 +26,7 @@ Biome Alert Pro uses **only official Discord authentication and APIs**:
 | **Discord incoming webhooks** | Outbound: forward alerts / test deliveries into your channels | `POST /api/webhooks/{id}/{token}` |
 | **Discord bot Gateway** | Inbound: receive channel messages via *your own bot* | Gateway v10 (identify, heartbeat, resume) |
 | **Local webhook listener** | Inbound: accept Discord-webhook-style JSON from your own forwarders | Local HTTP endpoint on 127.0.0.1 |
+| **Screen Watcher** | Inbound: OCR your *own* Discord window locally (for servers you can't add a bot to) | ScreenCaptureKit + Vision, fully on-device, read-only — touches no Discord API |
 
 **No user tokens. No self-botting. No reverse-engineered endpoints.**
 (Note: Discord webhooks by design only *send into* Discord — to *receive*
@@ -37,8 +38,13 @@ messages the official path is a bot, which this app supports natively.)
   biomes detected, launch count, last detection, detection latency, live
   CPU/memory usage, app version.
 - **Sources** — Discord OAuth sign-in, official bot (Gateway) connection with
-  automatic reconnect + exponential backoff, and a local webhook listener
-  endpoint with optional shared secret.
+  automatic reconnect + exponential backoff, a local webhook listener
+  endpoint with optional shared secret, and a Screen Watcher that OCRs your
+  own Discord window on-device (ScreenCaptureKit + Vision) for alert servers
+  where you can't invite a bot.
+- **Per-biome auto-launch** — choose exactly which biomes (Glitched,
+  Dreamspace, Cyberspace, Singularity) are allowed to launch Roblox
+  automatically.
 - **Webhook manager** — unlimited outbound Discord webhooks: add, edit,
   enable/disable, delete, validate, test, delivery status, retries with
   exponential backoff, Keychain storage.

@@ -35,6 +35,33 @@ Hardening options (Sources → Webhook Listener):
   Enable it in Settings only if another machine on your network forwards
   alerts (requires the port in the `X-BiomeAlert-Secret` setup too, ideally).
 
+## 1.5 Screen Watcher (for alert servers you can't add a bot to)
+
+Community alert servers (biome loggers, etc.) usually won't let you invite
+your own bot. The Screen Watcher solves this **without touching Discord's
+API at all**: it captures *your own* Discord window with ScreenCaptureKit,
+reads it with Apple's on-device Vision OCR, and when a new Roblox
+private-server link appears it launches Roblox directly from the extracted
+URL. Read-only, 100% local, never automates your Discord account.
+
+1. **Sources → Screen Watcher → Watch my Discord window.**
+2. macOS will prompt for **Screen Recording** permission → enable Biome
+   Alert Pro in *System Settings → Privacy & Security → Screen Recording* →
+   **relaunch the app** (macOS requires it).
+3. Keep the Discord app open on the alert channel (e.g. a `dreamspace-logger`
+   channel). The window can sit behind other windows — just don't minimize it.
+4. Pick which biomes may auto-launch under **Settings → Auto-Launch Biomes**.
+
+Notes:
+- Only Discord app windows are captured — never the whole screen.
+- Frames are OCR'd only when the window content changes (~2 checks/second),
+  so detection typically lands within a second of the message appearing.
+- Long private-server codes are OCR'd at 2× resolution with language
+  correction disabled; wrapped URLs are reassembled automatically. OCR can
+  still occasionally misread a character — the bot/webhook sources are
+  byte-exact when you have the option.
+- On macOS 15+, the system periodically re-confirms screen-capture consent.
+
 ## 2. Discord bot (official way to receive Discord messages)
 
 Discord's supported mechanism for reading channel messages is a **bot**:

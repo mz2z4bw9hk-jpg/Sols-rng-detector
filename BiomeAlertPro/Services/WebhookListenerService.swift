@@ -94,8 +94,9 @@ final class WebhookListenerService: @unchecked Sendable {
                     }
                 }
                 newListener.newConnectionHandler = { [weak self] connection in
-                    self?.queue.async {
-                        self?.accept(connection)
+                    guard let self else { return }
+                    self.queue.async {
+                        self.accept(connection)
                     }
                 }
                 newListener.start(queue: queue)
@@ -131,9 +132,10 @@ final class WebhookListenerService: @unchecked Sendable {
         connections[id] = connection
 
         connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
             switch state {
             case .failed, .cancelled:
-                self?.queue.async { self?.connections.removeValue(forKey: id) }
+                self.queue.async { self.connections.removeValue(forKey: id) }
             default:
                 break
             }
@@ -253,7 +255,8 @@ final class WebhookListenerService: @unchecked Sendable {
         var response = Data(head.utf8)
         response.append(bodyData)
         connection.send(content: response, completion: .contentProcessed { [weak self] _ in
-            self?.queue.async { self?.close(connection, id: id) }
+            guard let self else { return }
+            self.queue.async { self.close(connection, id: id) }
         })
     }
 

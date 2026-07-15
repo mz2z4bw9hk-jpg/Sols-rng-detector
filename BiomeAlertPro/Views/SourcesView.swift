@@ -25,6 +25,7 @@ private struct SourcesContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                screenWatcherSection
                 oauthSection
                 botSection
                 listenerSection
@@ -32,6 +33,49 @@ private struct SourcesContent: View {
             .padding(20)
         }
         .navigationTitle("Sources")
+    }
+
+    // MARK: - Screen watcher
+
+    private var screenWatcherSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                StatusBadge(kind: screenWatcherBadgeKind, text: environment.screenWatcherState.displayName)
+
+                Text("Watches your own Discord window using screen capture + on-device OCR. When a new Roblox private-server link for one of your selected biomes appears, Roblox launches instantly from the extracted link. 100% local and read-only — nothing is sent to Discord and your account is never automated. Ideal for alert servers you can't add a bot to.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Watch my Discord window", isOn: $settings.screenWatcherEnabled)
+                    .onChange(of: settings.screenWatcherEnabled) { _, _ in
+                        environment.applyScreenWatcherSetting()
+                        if !environment.isMonitoring && settings.screenWatcherEnabled {
+                            environment.startMonitoring()
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Grant Screen Recording when macOS asks (System Settings → Privacy & Security → Screen Recording), then relaunch the app.", systemImage: "1.circle")
+                    Label("Keep Discord open with the alert channel visible — behind other windows is fine, minimized is not.", systemImage: "2.circle")
+                    Label("Choose which biomes auto-launch in Settings → Auto-Launch Biomes.", systemImage: "3.circle")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(6)
+        } label: {
+            SectionTitle(title: "Screen Watcher (Discord window OCR)", systemImage: "eye")
+        }
+    }
+
+    private var screenWatcherBadgeKind: StatusBadge.Kind {
+        switch environment.screenWatcherState {
+        case .watching: return .ok
+        case .waitingForDiscord: return .warning
+        case .failed: return .error
+        case .stopped: return .neutral
+        }
     }
 
     // MARK: - Discord OAuth
