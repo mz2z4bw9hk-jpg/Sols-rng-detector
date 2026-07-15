@@ -29,7 +29,7 @@ struct BiomeAlertProApp: App {
         }
         .defaultSize(width: 1120, height: 720)
 
-        MenuBarExtra(isInserted: $settings.menuBarEnabled) {
+        MenuBarExtra(isInserted: menuBarInsertionBinding) {
             MenuBarView()
                 .environmentObject(environment)
                 .environmentObject(settings)
@@ -37,5 +37,20 @@ struct BiomeAlertProApp: App {
             Image(systemName: environment.isMonitoring ? "sparkles" : "pause.circle")
         }
         .menuBarExtraStyle(.window)
+    }
+
+    /// MenuBarExtra re-writes its `isInserted` binding during scene updates.
+    /// Binding it straight to a @Published property re-publishes on every
+    /// write — even identical ones — which spins an infinite update loop
+    /// ("Publishing changes from within view updates") and freezes the app.
+    /// Dropping same-value writes breaks the cycle.
+    private var menuBarInsertionBinding: Binding<Bool> {
+        Binding(
+            get: { settings.menuBarEnabled },
+            set: { newValue in
+                guard settings.menuBarEnabled != newValue else { return }
+                settings.menuBarEnabled = newValue
+            }
+        )
     }
 }
