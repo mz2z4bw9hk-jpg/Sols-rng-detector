@@ -57,14 +57,14 @@ private struct SourcesContent: View {
 
                 LabeledContent("Ignore links older than") {
                     HStack {
-                        Slider(value: $settings.screenWatcherMaxAgeMinutes, in: 0...30, step: 1)
+                        Slider(value: $settings.screenWatcherMaxAgeSeconds, in: 0...60, step: 1)
                             .frame(width: 160)
-                            .onChange(of: settings.screenWatcherMaxAgeMinutes) { _, _ in
+                            .onChange(of: settings.screenWatcherMaxAgeSeconds) { _, _ in
                                 environment.applyScreenWatcherSetting()
                             }
-                        Text(settings.screenWatcherMaxAgeMinutes == 0
+                        Text(settings.screenWatcherMaxAgeSeconds == 0
                              ? "No limit"
-                             : String(format: "%.0f min", settings.screenWatcherMaxAgeMinutes))
+                             : String(format: "%.0f sec", settings.screenWatcherMaxAgeSeconds))
                             .monospacedDigit()
                             .frame(width: 66, alignment: .trailing)
                     }

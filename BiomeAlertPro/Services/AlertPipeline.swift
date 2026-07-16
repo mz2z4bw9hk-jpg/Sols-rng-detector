@@ -90,16 +90,29 @@ actor AlertPipeline {
         let links = linkDetector.detect(in: event.fullText)
         let bestLink = links.first
 
+        // Biome classification: prefer the text match; otherwise infer from the
+        // channel name (e.g. a bare link in "singularity-snipes" → Singularity).
+        var biomeCategory = detection.biomeCategory
+        if biomeCategory == nil, bestLink?.isJoinable == true, let channel = event.channel {
+            biomeCategory = KeywordCategory.inferredFromChannel(channel)
+        }
+
         var confidence = detection.confidence
         if let bestLink {
             confidence += bestLink.isJoinable ? 0.25 : 0.1
         }
+        // A joinable link posted in a biome-named channel is a strong signal on
+        // its own, even if the message text is just the URL.
+        if detection.biomeCategory == nil, biomeCategory != nil {
+            confidence = max(confidence, 0.6)
+        }
         confidence = min(1.0, confidence)
 
-        let isRare = detection.biomeCategory?.isRare ?? false
+        let isRare = biomeCategory?.isRare ?? false
         let isAlert = confidence >= config.confidenceThreshold
             || isRare
             || (bestLink?.isJoinable == true && !detection.matches.isEmpty)
+            || (bestLink?.isJoinable == true && biomeCategory != nil)
 
         guard isAlert else {
             if !detection.matches.isEmpty || bestLink != nil {
@@ -118,7 +131,7 @@ actor AlertPipeline {
             channel: event.channel,
             content: String(event.fullText.prefix(500)),
             matchedKeywords: detection.matchedKeywordTexts,
-            biome: detection.biomeCategory?.displayName,
+            biome: biomeCategory?.displayName,
             isRareBiome: isRare,
             confidence: confidence,
             robloxLink: bestLink?.original,

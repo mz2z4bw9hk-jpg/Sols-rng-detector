@@ -49,6 +49,19 @@ enum KeywordCategory: String, Codable, CaseIterable, Identifiable, Sendable {
         case .custom: return "slider.horizontal.3"
         }
     }
+
+    /// Infers a biome from a channel name like "singularity-snipes" or
+    /// "glitched-finds". Returns nil when the channel doesn't name a biome.
+    static func inferredFromChannel(_ channel: String) -> KeywordCategory? {
+        let normalized = channel.lowercased()
+        for category in allCases where category.isBiome {
+            let name = category.rawValue // "glitched", "dreamspace", ...
+            if normalized.contains(name) || normalized.contains(String(name.prefix(5))) {
+                return category
+            }
+        }
+        return nil
+    }
 }
 
 /// How a keyword is matched against incoming text.

@@ -84,21 +84,25 @@ final class WebhookStore: ObservableObject {
 
     // MARK: - Delivery
 
-    /// Validates connectivity by fetching webhook metadata, then sends a test message.
-    func test(id: UUID) async -> Result<String, Error> {
+    /// Validates connectivity by fetching webhook metadata, then sends a test
+    /// message. When `pingEveryone` is true the test message includes an
+    /// @everyone mention so the ping can be verified end to end.
+    func test(id: UUID, pingEveryone: Bool = false) async -> Result<String, Error> {
         guard let config = webhooks.first(where: { $0.id == id }),
               let urlString = url(for: id) else {
             return .failure(WebhookError.invalidURL)
         }
         do {
             let info = try await client.fetchInfo(urlString: urlString)
+            let prefix = pingEveryone ? "@everyone\n" : ""
             try await client.send(
-                content: "✅ **Biome Alert Pro** test — webhook “\(config.name)” is connected.",
+                content: "\(prefix)✅ **Biome Alert Pro** test — webhook “\(config.name)” is connected.",
                 urlString: urlString
             )
             markDelivery(id: id, state: .ok, detail: "Test message delivered")
-            logs.log(.info, .webhook, "Webhook “\(config.name)” test succeeded")
-            return .success("Connected to “\(info.name ?? "webhook")” — test message sent.")
+            logs.log(.info, .webhook, "Webhook “\(config.name)” test succeeded\(pingEveryone ? " (with @everyone)" : "")")
+            let pingNote = pingEveryone ? " (with @everyone ping)" : ""
+            return .success("Connected to “\(info.name ?? "webhook")” — test message sent\(pingNote).")
         } catch {
             markDelivery(id: id, state: .failed, detail: error.localizedDescription)
             logs.log(.error, .webhook, "Webhook “\(config.name)” test failed: \(error.localizedDescription)")

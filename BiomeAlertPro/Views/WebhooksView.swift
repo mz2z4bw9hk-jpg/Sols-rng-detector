@@ -62,7 +62,7 @@ private struct WebhooksContent: View {
                         get: { webhook.isEnabled },
                         set: { store.setEnabled($0, id: webhook.id) }
                     ),
-                    onTest: { viewModel.runTest(for: webhook) },
+                    onTest: { viewModel.runTest(for: webhook, pingEveryone: settings.pingEveryoneOnForward) },
                     onEdit: { viewModel.presentEditForm(for: webhook) },
                     onDelete: { store.delete(id: webhook.id) }
                 )
@@ -77,7 +77,7 @@ private struct WebhooksContent: View {
             Toggle("Forward detected alerts to all enabled webhooks", isOn: $settings.forwardAlertsToWebhooks)
             Toggle("Ping @everyone in forwarded alerts", isOn: $settings.pingEveryoneOnForward)
                 .disabled(!settings.forwardAlertsToWebhooks)
-            Text("@everyone only pings in a server where you have permission to mention everyone, and only fires in channels your webhook posts to — never in the server you're watching.")
+            Text("With this on, a webhook's Test button also pings @everyone so you can verify it. @everyone only fires in the channel your webhook posts to — never in the server you're watching.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

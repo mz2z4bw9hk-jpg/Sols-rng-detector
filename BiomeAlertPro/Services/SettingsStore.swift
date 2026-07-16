@@ -58,8 +58,8 @@ final class SettingsStore: ObservableObject {
     @Published var screenWatcherEnabled: Bool { didSet { defaults.set(screenWatcherEnabled, forKey: "screenWatcherEnabled") } }
     /// Raw values of `KeywordCategory` biomes that may auto-launch Roblox.
     @Published var autoLaunchBiomes: [String] { didSet { defaults.set(autoLaunchBiomes, forKey: "autoLaunchBiomes") } }
-    /// Skip on-screen links whose "N minutes ago" timestamp exceeds this. 0 = no age limit.
-    @Published var screenWatcherMaxAgeMinutes: Double { didSet { defaults.set(screenWatcherMaxAgeMinutes, forKey: "screenWatcherMaxAgeMinutes") } }
+    /// Skip on-screen links whose visible age exceeds this many seconds. 0 = no age limit.
+    @Published var screenWatcherMaxAgeSeconds: Double { didSet { defaults.set(screenWatcherMaxAgeSeconds, forKey: "screenWatcherMaxAgeSeconds") } }
 
     // MARK: - Channels
     /// Comma-separated Discord channel names the bot should act on. Empty = all channels.
@@ -107,7 +107,7 @@ final class SettingsStore: ObservableObject {
             "listenerAllowLAN": false,
             "screenWatcherEnabled": false,
             "autoLaunchBiomes": KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue),
-            "screenWatcherMaxAgeMinutes": 3.0,
+            "screenWatcherMaxAgeSeconds": 5.0,
             "channelAllowList": "",
             "pingEveryoneOnForward": false,
             "discordClientID": "",
@@ -137,7 +137,7 @@ final class SettingsStore: ObservableObject {
         screenWatcherEnabled = defaults.bool(forKey: "screenWatcherEnabled")
         autoLaunchBiomes = defaults.stringArray(forKey: "autoLaunchBiomes")
             ?? KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue)
-        screenWatcherMaxAgeMinutes = defaults.double(forKey: "screenWatcherMaxAgeMinutes")
+        screenWatcherMaxAgeSeconds = defaults.double(forKey: "screenWatcherMaxAgeSeconds")
         channelAllowList = defaults.string(forKey: "channelAllowList") ?? ""
         pingEveryoneOnForward = defaults.bool(forKey: "pingEveryoneOnForward")
         discordClientID = defaults.string(forKey: "discordClientID") ?? ""

@@ -202,7 +202,7 @@ final class AppEnvironment: ObservableObject {
             Task { await gateway.start(token: token) }
         }
         if settings.screenWatcherEnabled {
-            screenWatcher.setMaxLinkAgeMinutes(settings.screenWatcherMaxAgeMinutes)
+            screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
             screenWatcher.start()
         }
     }
@@ -217,7 +217,7 @@ final class AppEnvironment: ObservableObject {
 
     /// Applies the screen-watcher toggle immediately while monitoring.
     func applyScreenWatcherSetting() {
-        screenWatcher.setMaxLinkAgeMinutes(settings.screenWatcherMaxAgeMinutes)
+        screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
         guard isMonitoring else { return }
         if settings.screenWatcherEnabled {
             screenWatcher.start()

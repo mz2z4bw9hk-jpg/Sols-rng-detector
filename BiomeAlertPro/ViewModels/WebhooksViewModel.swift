@@ -57,12 +57,12 @@ final class WebhooksViewModel: ObservableObject {
         }
     }
 
-    func runTest(for webhook: WebhookConfig) {
+    func runTest(for webhook: WebhookConfig, pingEveryone: Bool = false) {
         testingID = webhook.id
         testResults[webhook.id] = nil
         Task { [weak self] in
             guard let self else { return }
-            let result = await self.store.test(id: webhook.id)
+            let result = await self.store.test(id: webhook.id, pingEveryone: pingEveryone)
             self.testingID = nil
             switch result {
             case .success(let message):
