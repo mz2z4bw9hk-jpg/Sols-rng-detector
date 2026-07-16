@@ -27,6 +27,7 @@ private struct DashboardContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                heroSection
                 statusSection
                 statsSection
                 systemSection
@@ -46,36 +47,80 @@ private struct DashboardContent: View {
         }
     }
 
+    // MARK: - Hero
+
+    private var heroSection: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(environment.isMonitoring ? Color.green.opacity(0.15) : Color.secondary.opacity(0.12))
+                    .frame(width: 54, height: 54)
+                Image(systemName: environment.isMonitoring ? "sparkles" : "pause.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(environment.isMonitoring ? Color.green : Color.secondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(environment.isMonitoring ? "Monitoring Active" : "Monitoring Paused")
+                    .font(.title2.weight(.bold))
+                Text(heroSubtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                environment.toggleMonitoring()
+            } label: {
+                Label(
+                    environment.isMonitoring ? "Pause" : "Start",
+                    systemImage: environment.isMonitoring ? "pause.fill" : "play.fill"
+                )
+                .frame(minWidth: 64)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(environment.isMonitoring ? .orange : .green)
+            .controlSize(.large)
+        }
+        .padding(18)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .animation(.easeInOut(duration: 0.2), value: environment.isMonitoring)
+    }
+
+    private var heroSubtitle: String {
+        if environment.isMonitoring {
+            let count = activeSourceCount
+            return count == 0
+                ? "No sources connected yet — open Sources to add one"
+                : "\(count) source\(count == 1 ? "" : "s") live · watching for rare biomes"
+        }
+        return "Press Start to resume watching for biome alerts"
+    }
+
     // MARK: - Connection status
 
     private var statusSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 statusRow(
-                    title: "Monitoring",
-                    badge: StatusBadge(
-                        kind: environment.isMonitoring ? .ok : .neutral,
-                        text: environment.isMonitoring ? "Active" : "Paused"
-                    )
-                )
-                Divider()
-                statusRow(
                     title: "Webhook Listener",
+                    systemImage: "antenna.radiowaves.left.and.right",
                     badge: StatusBadge(kind: listenerBadgeKind, text: environment.listenerState.displayName)
                 )
                 Divider()
                 statusRow(
                     title: "Screen Watcher",
+                    systemImage: "eye",
                     badge: StatusBadge(kind: screenWatcherBadgeKind, text: environment.screenWatcherState.displayName)
                 )
                 Divider()
                 statusRow(
                     title: "Discord Bot",
+                    systemImage: "bubble.left.and.bubble.right",
                     badge: StatusBadge(kind: gatewayBadgeKind, text: environment.gatewayStatus.displayName)
                 )
                 Divider()
                 statusRow(
                     title: "Discord Account",
+                    systemImage: "person.crop.circle",
                     badge: StatusBadge(
                         kind: oauth.isSignedIn ? .ok : .neutral,
                         text: oauth.user.map { "Signed in as \($0.displayName)" } ?? "Not signed in"
@@ -84,6 +129,7 @@ private struct DashboardContent: View {
                 Divider()
                 statusRow(
                     title: "Notifications",
+                    systemImage: "bell.badge",
                     badge: StatusBadge(
                         kind: environment.notificationsAuthorized ? .ok : .warning,
                         text: environment.notificationsAuthorized ? "Authorized" : "Not authorized"
@@ -96,10 +142,13 @@ private struct DashboardContent: View {
         }
     }
 
-    private func statusRow(title: String, badge: StatusBadge) -> some View {
-        HStack {
-            Text(title)
+    private func statusRow(title: String, systemImage: String, badge: StatusBadge) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
+                .frame(width: 20)
+            Text(title)
+                .foregroundStyle(.primary)
             Spacer()
             badge
         }

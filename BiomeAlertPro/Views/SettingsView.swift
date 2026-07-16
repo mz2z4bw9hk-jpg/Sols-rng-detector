@@ -114,6 +114,12 @@ private struct SettingsContent: View {
             Toggle("Launch Roblox automatically", isOn: $settings.autoLaunchRoblox)
             Toggle("Only launch for rare biomes", isOn: $settings.launchOnlyForRareBiomes)
                 .disabled(!settings.autoLaunchRoblox)
+            Toggle("Keep Roblox pre-launched while monitoring", isOn: $settings.prewarmRoblox)
+                .onChange(of: settings.prewarmRoblox) { _, enabled in
+                    if enabled && environment.isMonitoring {
+                        environment.launcher.prewarm()
+                    }
+                }
 
             LabeledContent("Launch delay") {
                 HStack {

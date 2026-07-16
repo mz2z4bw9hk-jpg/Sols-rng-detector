@@ -218,6 +218,9 @@ final class AppEnvironment: ObservableObject {
             screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
             screenWatcher.start()
         }
+        if settings.prewarmRoblox {
+            launcher.prewarm()
+        }
     }
 
     func stopMonitoring() {
@@ -339,49 +342,58 @@ final class AppEnvironment: ObservableObject {
         logs.log(level, .detection, message)
     }
 
-    /// Delivers a confirmed alert: history, stats, notification, sound,
-    /// optional webhook forwarding, and (optionally) auto-launching Roblox.
+    /// Delivers a confirmed alert. Launch happens FIRST — before history,
+    /// notification, or sound — because every millisecond counts when a rare
+    /// biome server is filling up.
     func deliver(record: AlertRecord, link: RobloxLink?) {
-        history.add(record)
-        stats.recordAlert(record: record)
+        var pendingRecord = record
 
-        let summary = record.biome.map { "\($0) biome" } ?? "Alert"
+        if let link, link.isJoinable {
+            lastJoinableLink = link
+            if shouldAutoLaunch(record: pendingRecord) {
+                let delay = settings.launchDelaySeconds
+                if delay <= 0 {
+                    // Synchronous fast path: open Roblox before anything else.
+                    let result = launcher.launch(link, cooldownSeconds: settings.launchCooldownSeconds)
+                    if case .launched = result {
+                        stats.recordLaunch()
+                    }
+                    pendingRecord.launchStatus = result.status
+                } else {
+                    let recordID = pendingRecord.id
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(delay))
+                        self?.performLaunch(recordID: recordID, link: link)
+                    }
+                }
+            } else {
+                pendingRecord.launchStatus = .disabled
+            }
+        }
+
+        // Immutable snapshot from here on (safe to capture in Tasks).
+        let delivered = pendingRecord
+
+        history.add(delivered)
+        stats.recordAlert(record: delivered)
+
+        let summary = delivered.biome.map { "\($0) biome" } ?? "Alert"
         logs.log(.info, .detection, String(format: "%@ detected via %@ (confidence %.2f, %.0f ms)",
-                                           summary, record.source, record.confidence, record.latencyMs))
+                                           summary, delivered.source, delivered.confidence, delivered.latencyMs))
 
         if settings.notificationsEnabled {
             let playOwnSound = settings.soundEnabled
             Task {
-                await notifications.postAlert(record: record, link: link, useSystemSound: !playOwnSound)
+                await notifications.postAlert(record: delivered, link: link, useSystemSound: !playOwnSound)
             }
         }
         if settings.soundEnabled {
-            sounds.play(named: settings.sound(forBiomeDisplayName: record.biome))
-        }
-
-        // Remember the newest joinable link for the "join last" hotkey.
-        if let link, link.isJoinable {
-            lastJoinableLink = link
+            sounds.play(named: settings.sound(forBiomeDisplayName: delivered.biome))
         }
 
         if settings.forwardAlertsToWebhooks {
-            let message = Self.forwardMessage(for: record, pingEveryone: settings.pingEveryoneOnForward)
+            let message = Self.forwardMessage(for: delivered, pingEveryone: settings.pingEveryoneOnForward)
             Task { await webhooks.broadcast(message: message) }
-        }
-
-        // Auto-launch Roblox for joinable links.
-        if let link, link.isJoinable {
-            if shouldAutoLaunch(record: record) {
-                let delay = settings.launchDelaySeconds
-                Task { [weak self] in
-                    if delay > 0 {
-                        try? await Task.sleep(for: .seconds(delay))
-                    }
-                    self?.performLaunch(recordID: record.id, link: link)
-                }
-            } else {
-                history.updateLaunchStatus(id: record.id, status: .disabled)
-            }
         }
     }
 

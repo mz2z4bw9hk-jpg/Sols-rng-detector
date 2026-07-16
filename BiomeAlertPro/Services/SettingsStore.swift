@@ -45,6 +45,8 @@ final class SettingsStore: ObservableObject {
     @Published var launchCooldownSeconds: Double { didSet { defaults.set(launchCooldownSeconds, forKey: "launchCooldownSeconds") } }
     /// Only auto-launch for rare biomes (vs. every alert containing a link).
     @Published var launchOnlyForRareBiomes: Bool { didSet { defaults.set(launchOnlyForRareBiomes, forKey: "launchOnlyForRareBiomes") } }
+    /// Keep the Roblox client pre-launched while monitoring so joins skip its cold start.
+    @Published var prewarmRoblox: Bool { didSet { defaults.set(prewarmRoblox, forKey: "prewarmRoblox") } }
 
     // MARK: - Detection
     @Published var confidenceThreshold: Double { didSet { defaults.set(confidenceThreshold, forKey: "confidenceThreshold") } }
@@ -112,6 +114,7 @@ final class SettingsStore: ObservableObject {
             "launchDelaySeconds": 0.0,
             "launchCooldownSeconds": 120.0,
             "launchOnlyForRareBiomes": false,
+            "prewarmRoblox": false,
             "confidenceThreshold": 0.5,
             "duplicateCooldownSeconds": 60.0,
             "cacheDurationMinutes": 10.0,
@@ -145,6 +148,7 @@ final class SettingsStore: ObservableObject {
         launchDelaySeconds = defaults.double(forKey: "launchDelaySeconds")
         launchCooldownSeconds = defaults.double(forKey: "launchCooldownSeconds")
         launchOnlyForRareBiomes = defaults.bool(forKey: "launchOnlyForRareBiomes")
+        prewarmRoblox = defaults.bool(forKey: "prewarmRoblox")
         confidenceThreshold = defaults.double(forKey: "confidenceThreshold")
         duplicateCooldownSeconds = defaults.double(forKey: "duplicateCooldownSeconds")
         cacheDurationMinutes = defaults.double(forKey: "cacheDurationMinutes")

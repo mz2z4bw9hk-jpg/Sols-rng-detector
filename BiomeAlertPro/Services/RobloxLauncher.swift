@@ -36,6 +36,26 @@ final class RobloxLauncher: ObservableObject {
         return NSWorkspace.shared.urlForApplication(toOpen: probe) != nil
     }
 
+    /// Whether the Roblox client is currently running.
+    var isRobloxRunning: Bool {
+        NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier?.lowercased().hasPrefix("com.roblox") == true
+        }
+    }
+
+    /// Launches the Roblox app in the background (no game) so a later join
+    /// skips the client's cold start — a multi-second head start on busy
+    /// rare-biome servers.
+    func prewarm() {
+        guard !isRobloxRunning,
+              let probe = URL(string: "roblox://placeId=0"),
+              let appURL = NSWorkspace.shared.urlForApplication(toOpen: probe) else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration, completionHandler: nil)
+        logs.log(.info, .launch, "Pre-warmed Roblox in the background for faster joins")
+    }
+
     func launch(_ link: RobloxLink, cooldownSeconds: Double) -> LaunchResult {
         // Duplicate suppression per server/link code.
         let now = Date()

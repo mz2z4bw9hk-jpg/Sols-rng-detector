@@ -165,6 +165,27 @@ To re-broadcast detected alerts into your own Discord channels:
 - **Faster screen watcher** — the watcher now samples ~5×/second and OCRs only
   the message area (skipping Discord's sidebar) for lower join latency.
 
+## 5.9 Maximizing your odds on high-demand servers
+
+The app is tuned so the launch fires *before* the notification, sound, or
+history write. To squeeze out everything else:
+
+1. **Keep Roblox pre-launched** — Settings → Roblox Launch → *Keep Roblox
+   pre-launched while monitoring*. A warm client joins in ~1–2 s instead of a
+   5–10 s cold start. This is the single biggest win.
+2. **Launch delay 0.0 s** (default) — any delay is time someone else is
+   joining.
+3. **Stay signed in to Roblox** in the app/browser so no login screen appears
+   mid-join.
+4. **Use the bot for multi-channel** — it reacts to all snipe channels at
+   once; the screen watcher covers whichever channel is visible.
+5. **Don't minimize Discord** — behind other windows is fine; minimized stops
+   rendering and the watcher goes blind.
+6. **Keep the blocklist current** — every launch wasted on a "fake"/"closed"
+   link is a cooldown you might need seconds later.
+7. **⌥⌘J is your manual fallback** — if a join fails or OCR misreads, one
+   keypress retries the newest link without touching the mouse.
+
 ## 6. Recommended first run
 
 1. Launch the app → grant notification permission.
