@@ -174,9 +174,11 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
 
     private func attach(to window: SCWindow) async throws {
         let configuration = SCStreamConfiguration()
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 2) // ≤ 2 fps
+        // ~5 fps: the frame-change hash gates OCR, so idle cost stays low while
+        // a new drop is picked up within ~200 ms.
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        configuration.queueDepth = 3
+        configuration.queueDepth = 4
         configuration.showsCursor = false
         // Capture at 2× for reliable OCR of long private-server codes.
         configuration.width = min(Int(window.frame.width) * 2, 3584)
@@ -245,6 +247,11 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         request.recognitionLevel = .accurate
         // Language correction would "fix" link codes into words — keep it off.
         request.usesLanguageCorrection = false
+        request.minimumTextHeight = 0.008
+        // Skip Discord's left server/channel sidebar (~12% of width) so OCR
+        // only reads the message area — faster and fewer false matches.
+        // Vision's region origin is bottom-left, normalized.
+        request.regionOfInterest = CGRect(x: 0.12, y: 0.0, width: 0.88, height: 1.0)
 
         let handler = VNImageRequestHandler(cvPixelBuffer: buffer, options: [:])
         do {

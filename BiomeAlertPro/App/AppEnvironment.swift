@@ -23,9 +23,12 @@ final class AppEnvironment: ObservableObject {
     let listener: WebhookListenerService
     let gateway: DiscordGatewayService
     let screenWatcher: ScreenWatcherService
+    let hotKeys = HotKeyService()
 
     private var pipeline: AlertPipeline?
     private var bootstrapped = false
+    /// Most recent joinable link, for the "join last" hotkey / menu action.
+    private var lastJoinableLink: RobloxLink?
 
     // MARK: - Published state
 
@@ -172,6 +175,15 @@ final class AppEnvironment: ObservableObject {
         }
         performance.start()
 
+        // Global hotkeys.
+        hotKeys.onJoinLast = { [weak self] in
+            Task { @MainActor in self?.joinLastLink() }
+        }
+        hotKeys.onTogglePause = { [weak self] in
+            Task { @MainActor in self?.toggleMonitoring() }
+        }
+        applyHotkeySetting()
+
         if settings.listenerEnabled || botTokenConfigured || settings.screenWatcherEnabled {
             startMonitoring()
         }
@@ -181,6 +193,7 @@ final class AppEnvironment: ObservableObject {
     func shutdown() {
         logs.log(.info, .lifecycle, "Biome Alert Pro shutting down")
         stopMonitoring()
+        hotKeys.unregister()
         performance.stop()
     }
 
@@ -214,6 +227,36 @@ final class AppEnvironment: ObservableObject {
         Task { await gateway.stop() }
         logs.log(.info, .lifecycle, "Monitoring stopped")
     }
+
+    func toggleMonitoring() {
+        if isMonitoring {
+            stopMonitoring()
+        } else {
+            startMonitoring()
+        }
+    }
+
+    /// Registers or removes the global hotkeys per the current setting.
+    func applyHotkeySetting() {
+        if settings.globalHotkeysEnabled {
+            hotKeys.register()
+            logs.log(.info, .lifecycle, "Global hotkeys enabled (⌥⌘J join last · ⌥⌘P pause)")
+        } else {
+            hotKeys.unregister()
+        }
+    }
+
+    /// Joins the most recently detected joinable link (hotkey / menu action).
+    func joinLastLink() {
+        guard let link = lastJoinableLink else {
+            logs.log(.warning, .launch, "Join-last requested but no link has been detected yet")
+            return
+        }
+        logs.log(.info, .launch, "Join-last triggered")
+        performLaunch(recordID: nil, link: link)
+    }
+
+    var hasLastLink: Bool { lastJoinableLink != nil }
 
     /// Applies the screen-watcher toggle immediately while monitoring.
     func applyScreenWatcherSetting() {
@@ -287,7 +330,8 @@ final class AppEnvironment: ObservableObject {
             duplicateCooldown: settings.duplicateCooldownSeconds,
             cacheDuration: settings.cacheDurationMinutes * 60,
             fuzzyEnabled: settings.fuzzyMatchingEnabled,
-            allowedChannels: settings.allowedChannels
+            allowedChannels: settings.allowedChannels,
+            blockWords: settings.blockedWords
         )
     }
 
@@ -312,7 +356,12 @@ final class AppEnvironment: ObservableObject {
             }
         }
         if settings.soundEnabled {
-            sounds.play(named: settings.alertSoundName)
+            sounds.play(named: settings.sound(forBiomeDisplayName: record.biome))
+        }
+
+        // Remember the newest joinable link for the "join last" hotkey.
+        if let link, link.isJoinable {
+            lastJoinableLink = link
         }
 
         if settings.forwardAlertsToWebhooks {

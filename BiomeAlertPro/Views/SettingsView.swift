@@ -25,6 +25,7 @@ private struct SettingsContent: View {
             robloxSection
             biomeLaunchSection
             detectionSection
+            hotkeysSection
             appearanceSection
             performanceSection
         }
@@ -77,8 +78,34 @@ private struct SettingsContent: View {
             .onChange(of: settings.alertSoundName) { _, newValue in
                 environment.sounds.play(named: newValue)
             }
+
+            Toggle("Use a different sound per biome", isOn: $settings.perBiomeSoundsEnabled)
+                .disabled(!settings.soundEnabled)
+
+            if settings.perBiomeSoundsEnabled {
+                ForEach(KeywordCategory.allCases.filter(\.isBiome)) { category in
+                    Picker(selection: Binding(
+                        get: { settings.biomeSound(for: category) },
+                        set: { newSound in
+                            settings.setBiomeSound(newSound, for: category)
+                            environment.sounds.play(named: newSound)
+                        }
+                    )) {
+                        ForEach(SoundPlayer.availableSounds, id: \.self) { sound in
+                            Text(sound).tag(sound)
+                        }
+                    } label: {
+                        Label(category.displayName, systemImage: category.symbolName)
+                    }
+                    .disabled(!settings.soundEnabled)
+                }
+            }
         } header: {
-            Text("Notifications")
+            Text("Notifications & Sound")
+        } footer: {
+            if settings.perBiomeSoundsEnabled {
+                Text("Each biome plays its own sound so you can tell what dropped without looking.")
+            }
         }
     }
 
@@ -145,10 +172,36 @@ private struct SettingsContent: View {
                 }
             }
             Toggle("Fuzzy keyword matching", isOn: $settings.fuzzyMatchingEnabled)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Blocklist words", systemImage: "hand.raised.slash")
+                    .font(.callout.weight(.medium))
+                TextField("fake, expired, closed, patched, scam, full", text: $settings.blocklist, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2...4)
+                Text("If a message contains any of these words it is ignored — so a link marked “fake” or “closed” never launches. Comma or newline separated.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("Detection")
         } footer: {
             Text("Alerts fire when the combined keyword + link confidence reaches the threshold, or when a rare biome keyword is detected.")
+        }
+    }
+
+    private var hotkeysSection: some View {
+        Section {
+            Toggle("Enable global hotkeys", isOn: $settings.globalHotkeysEnabled)
+                .onChange(of: settings.globalHotkeysEnabled) { _, _ in
+                    environment.applyHotkeySetting()
+                }
+            LabeledContent("Join last detected link", value: HotKeyService.joinLastDescription)
+            LabeledContent("Pause / resume monitoring", value: HotKeyService.togglePauseDescription)
+        } header: {
+            Text("Hotkeys")
+        } footer: {
+            Text("System-wide shortcuts that work even while Discord or Roblox is focused. ⌥ is Option, ⌘ is Command.")
         }
     }
 

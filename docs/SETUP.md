@@ -149,6 +149,22 @@ To re-broadcast detected alerts into your own Discord channels:
 - Tune behavior in **Settings → Roblox Launch**: automatic launch on/off,
   launch delay, duplicate-launch cooldown, rare-biomes-only mode.
 
+## 5.5 Power features (Settings)
+
+- **Global hotkeys** — enable in Settings → Hotkeys. Work anywhere, even while
+  Roblox/Discord is focused:
+  - **⌥⌘J** — join the last detected link (your instant manual fallback if OCR
+    misreads a code).
+  - **⌥⌘P** — pause / resume monitoring.
+  The menu-bar panel also has a **Join Last Link** button.
+- **Per-biome sounds** — Settings → Notifications & Sound → “Use a different
+  sound per biome.” Hear whether it's Glitched vs Singularity without looking.
+- **Blocklist words** — Settings → Detection. Any message containing a blocked
+  word (default: fake, expired, closed, patched, scam, full, ended, over) is
+  ignored, so a dead-server link never launches.
+- **Faster screen watcher** — the watcher now samples ~5×/second and OCRs only
+  the message area (skipping Discord's sidebar) for lower join latency.
+
 ## 6. Recommended first run
 
 1. Launch the app → grant notification permission.

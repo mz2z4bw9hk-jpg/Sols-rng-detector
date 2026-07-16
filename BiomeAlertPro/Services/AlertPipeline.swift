@@ -12,6 +12,8 @@ struct DetectionConfiguration: Sendable {
     /// Normalized channel names to accept (empty = all). Applies to sources
     /// that report a channel, such as the Discord bot.
     let allowedChannels: Set<String>
+    /// Normalized words that, if present in the message, drop the alert.
+    let blockWords: [String]
 }
 
 /// Background processing stage: consumes normalized incoming events from all
@@ -62,6 +64,16 @@ actor AlertPipeline {
            !config.allowedChannels.contains(channel.lowercased()) {
             await environment.logPipeline(.debug, "Ignored message from #\(channel) (not in channel list)")
             return
+        }
+
+        // Blocklist: drop messages containing any blocked word (e.g. a link
+        // marked "fake", "expired", or "closed") before doing anything else.
+        if !config.blockWords.isEmpty {
+            let normalized = KeywordEngine.normalize(event.fullText)
+            if let hit = config.blockWords.first(where: { normalized.contains($0) }) {
+                await environment.logPipeline(.info, "Ignored alert — blocklisted word “\(hit)”")
+                return
+            }
         }
 
         // Expire dedupe cache entries.

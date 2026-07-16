@@ -58,13 +58,20 @@ private struct MenuBarContent: View {
 
             Divider()
 
+            Button {
+                environment.joinLastLink()
+            } label: {
+                Label("Join Last Link", systemImage: "arrow.down.right.circle.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .disabled(!environment.hasLastLink)
+            .help("Launch Roblox for the most recently detected link")
+
             HStack {
                 Button {
-                    if environment.isMonitoring {
-                        environment.stopMonitoring()
-                    } else {
-                        environment.startMonitoring()
-                    }
+                    environment.toggleMonitoring()
                 } label: {
                     Label(
                         environment.isMonitoring ? "Pause" : "Start",
