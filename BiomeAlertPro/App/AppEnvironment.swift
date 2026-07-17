@@ -216,6 +216,7 @@ final class AppEnvironment: ObservableObject {
         }
         if settings.screenWatcherEnabled {
             screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
+            screenWatcher.setClickToJoin(settings.autoClickJoinEnabled)
             screenWatcher.start()
         }
         if settings.prewarmRoblox {
@@ -264,6 +265,7 @@ final class AppEnvironment: ObservableObject {
     /// Applies the screen-watcher toggle immediately while monitoring.
     func applyScreenWatcherSetting() {
         screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
+        screenWatcher.setClickToJoin(settings.autoClickJoinEnabled)
         guard isMonitoring else { return }
         if settings.screenWatcherEnabled {
             screenWatcher.start()

@@ -52,6 +52,23 @@ URL. Read-only, 100% local, never automates your Discord account.
    channel). The window can sit behind other windows — just don't minimize it.
 4. Pick which biomes may auto-launch under **Settings → Auto-Launch Biomes**.
 
+**Auto-click the Join button (for hidden-link servers):**
+Some servers hide the real join URL behind a "Click to Join Server" button —
+OCR can't read a hidden hyperlink, so the app instead *clicks the button on
+screen*. Enable it in Sources → Screen Watcher → "Auto-click the Click to
+Join Server button". Requirements & caveats:
+- Grant **Accessibility** permission when prompted (System Settings → Privacy
+  & Security → Accessibility), then relaunch. This is separate from Screen
+  Recording. (The app ships un-sandboxed specifically so it can send the
+  click — macOS sandboxes can't.)
+- **Discord must be the front, visible window** — the click lands wherever
+  the button is drawn, so it can't be behind other windows for this mode.
+- It clicks → your browser opens the join page → Roblox launches. One extra
+  hop vs. the bot, but no bot needed.
+- Experimental: message-ID deduping means each alert is clicked once and old
+  ones on screen are skipped. If it ever clicks the wrong spot, disable it and
+  check Logs for the coordinates.
+
 **Only-new-links safety (important):**
 - **Priming** — when the watcher starts, every link already on screen is
   recorded as "seen" and never joined. Only links that appear *after* it

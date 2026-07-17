@@ -78,6 +78,10 @@ private struct SourcesContent: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                Divider()
+
+                autoClickBlock
             }
             .padding(6)
         } label: {
@@ -91,6 +95,47 @@ private struct SourcesContent: View {
         case .waitingForDiscord: return .warning
         case .failed: return .error
         case .stopped: return .neutral
+        }
+    }
+
+    @ViewBuilder
+    private var autoClickBlock: some View {
+        Toggle(isOn: $settings.autoClickJoinEnabled) {
+            Label("Auto-click the “Click to Join Server” button", systemImage: "cursorarrow.click.2")
+        }
+        .onChange(of: settings.autoClickJoinEnabled) { _, enabled in
+            environment.applyScreenWatcherSetting()
+            if enabled && !AutoClicker.hasAccessibilityPermission {
+                AutoClicker.requestAccessibilityPermission()
+            }
+        }
+
+        Text("For servers where the real join link is hidden behind a button (OCR can't read a hidden link). The app finds the button on screen and clicks it, which opens the join page in your browser.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        if settings.autoClickJoinEnabled {
+            HStack(spacing: 8) {
+                Image(systemName: AutoClicker.hasAccessibilityPermission ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(AutoClicker.hasAccessibilityPermission ? .green : .orange)
+                Text(AutoClicker.hasAccessibilityPermission
+                     ? "Accessibility permission granted"
+                     : "Needs Accessibility permission to click")
+                    .font(.caption)
+                Spacer()
+                if !AutoClicker.hasAccessibilityPermission {
+                    Button("Grant…") { AutoClicker.requestAccessibilityPermission() }
+                        .controlSize(.small)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Label("Discord must be the visible, front window — the click lands wherever the button is on screen.", systemImage: "exclamationmark.circle")
+                Label("Experimental: if it clicks the wrong spot, turn it off and check Logs for the coordinates so it can be calibrated.", systemImage: "wrench.and.screwdriver")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
     }
 

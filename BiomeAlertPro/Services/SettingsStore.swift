@@ -68,6 +68,8 @@ final class SettingsStore: ObservableObject {
     @Published var autoLaunchBiomes: [String] { didSet { defaults.set(autoLaunchBiomes, forKey: "autoLaunchBiomes") } }
     /// Skip on-screen links whose visible age exceeds this many seconds. 0 = no age limit.
     @Published var screenWatcherMaxAgeSeconds: Double { didSet { defaults.set(screenWatcherMaxAgeSeconds, forKey: "screenWatcherMaxAgeSeconds") } }
+    /// Auto-click the on-screen "Click to Join Server" button (needs Accessibility).
+    @Published var autoClickJoinEnabled: Bool { didSet { defaults.set(autoClickJoinEnabled, forKey: "autoClickJoinEnabled") } }
 
     // MARK: - Channels
     /// Comma-separated Discord channel names the bot should act on. Empty = all channels.
@@ -125,6 +127,7 @@ final class SettingsStore: ObservableObject {
             "screenWatcherEnabled": false,
             "autoLaunchBiomes": KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue),
             "screenWatcherMaxAgeSeconds": 5.0,
+            "autoClickJoinEnabled": false,
             "channelAllowList": "",
             "pingEveryoneOnForward": false,
             "discordClientID": "",
@@ -160,6 +163,7 @@ final class SettingsStore: ObservableObject {
         autoLaunchBiomes = defaults.stringArray(forKey: "autoLaunchBiomes")
             ?? KeywordCategory.allCases.filter(\.isBiome).map(\.rawValue)
         screenWatcherMaxAgeSeconds = defaults.double(forKey: "screenWatcherMaxAgeSeconds")
+        autoClickJoinEnabled = defaults.bool(forKey: "autoClickJoinEnabled")
         channelAllowList = defaults.string(forKey: "channelAllowList") ?? ""
         pingEveryoneOnForward = defaults.bool(forKey: "pingEveryoneOnForward")
         discordClientID = defaults.string(forKey: "discordClientID") ?? ""

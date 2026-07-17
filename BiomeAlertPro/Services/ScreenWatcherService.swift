@@ -68,6 +68,17 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     /// Configurable max on-screen age in seconds; links whose visible age
     /// exceeds this are skipped. 0 disables the age check.
     private var maxAgeSeconds: Double = 0
+    /// Whether to synthesize a click on the "Click to Join Server" button.
+    private var clickToJoin = false
+    /// The watched window's screen frame (points, global), for click mapping.
+    private var windowFrameValue: CGRect = .zero
+
+    // Click state, accessed only on `sampleQueue`.
+    private let clicker = AutoClicker()
+    private var clickedIDs: Set<String> = []
+    private var clickedOrder: [String] = []
+    private var clickPrimed = false
+    private var warnedNoAccessibility = false
 
     private static let maxSeenLinks = 800
 
@@ -86,6 +97,31 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return maxAgeSeconds
+    }
+
+    /// Enables/disables auto-clicking the Join button (thread-safe).
+    func setClickToJoin(_ enabled: Bool) {
+        lock.lock()
+        clickToJoin = enabled
+        lock.unlock()
+    }
+
+    private func currentClickToJoin() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return clickToJoin
+    }
+
+    private func setWindowFrame(_ frame: CGRect) {
+        lock.lock()
+        windowFrameValue = frame
+        lock.unlock()
+    }
+
+    private func currentWindowFrame() -> CGRect {
+        lock.lock()
+        defer { lock.unlock() }
+        return windowFrameValue
     }
 
     override init() {
@@ -190,9 +226,11 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         try await newStream.startCapture()
 
         storeStream(newStream)
+        setWindowFrame(window.frame)
         // Re-prime for the new capture so links already visible aren't joined.
         sampleQueue.async { [weak self] in
             self?.hasPrimed = false
+            self?.clickPrimed = false
             self?.lastFrameHash = 0
         }
     }
@@ -243,15 +281,19 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     }
 
     private func processFrame(_ buffer: CVPixelBuffer) {
+        let clicking = currentClickToJoin()
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         // Language correction would "fix" link codes into words — keep it off.
         request.usesLanguageCorrection = false
         request.minimumTextHeight = 0.008
         // Skip Discord's left server/channel sidebar (~12% of width) so OCR
-        // only reads the message area — faster and fewer false matches.
-        // Vision's region origin is bottom-left, normalized.
-        request.regionOfInterest = CGRect(x: 0.12, y: 0.0, width: 0.88, height: 1.0)
+        // only reads the message area — faster and fewer false matches. When
+        // auto-clicking, use the full frame so bounding boxes map cleanly to
+        // screen coordinates.
+        if !clicking {
+            request.regionOfInterest = CGRect(x: 0.12, y: 0.0, width: 0.88, height: 1.0)
+        }
 
         let handler = VNImageRequestHandler(cvPixelBuffer: buffer, options: [:])
         do {
@@ -259,9 +301,13 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         } catch {
             return
         }
-        let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        let observations = request.results ?? []
+        let lines = observations.compactMap { $0.topCandidates(1).first?.string }
         guard !lines.isEmpty else { return }
         handleRecognized(lines: lines)
+        if clicking {
+            handleClickToJoin(observations: observations)
+        }
     }
 
     private func handleRecognized(lines: [String]) {
@@ -334,6 +380,83 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         let key = "code:" + code
         return seenLinks.contains { $0.hasPrefix(key) && $0 != key }
     }
+
+    // MARK: - Auto-click the Join button
+
+    /// Locates a new "Click to Join Server" button and clicks it. Dedupes by
+    /// the message's visible "ID: <n>" line so a given alert is clicked once.
+    private func handleClickToJoin(observations: [VNRecognizedTextObservation]) {
+        let frame = currentWindowFrame()
+        guard frame.width > 1, frame.height > 1 else { return }
+
+        struct Obs { let text: String; let box: CGRect }
+        let obs = observations.compactMap { o -> Obs? in
+            guard let text = o.topCandidates(1).first?.string else { return nil }
+            return Obs(text: text, box: o.boundingBox)
+        }
+
+        // Message IDs currently on screen (unique per message).
+        let idObs: [(id: String, box: CGRect)] = obs.compactMap { o in
+            guard let match = o.text.firstMatch(of: Self.messageIDRegex) else { return nil }
+            return (String(match.output.1), o.box)
+        }
+
+        // Prime: on the first pass, mark every visible message as already
+        // handled so startup never clicks an old alert.
+        if !clickPrimed {
+            clickPrimed = true
+            idObs.forEach { markClicked($0.id) }
+            onLog?(.info, "Auto-click ready — \(idObs.count) message(s) already on screen ignored; only new drops get clicked")
+            return
+        }
+
+        let buttons = obs.filter { o in
+            let text = o.text.lowercased()
+            return text.contains("join server") || text.contains("click to join")
+        }
+        guard !buttons.isEmpty else { return }
+
+        guard AutoClicker.hasAccessibilityPermission else {
+            if !warnedNoAccessibility {
+                warnedNoAccessibility = true
+                onLog?(.warning, "A Join button appeared but Accessibility permission isn't granted — enable it in System Settings → Privacy & Security → Accessibility, then relaunch")
+            }
+            return
+        }
+
+        // Newest message is lowest on screen (bottom-left origin → smallest y).
+        let ordered = buttons.sorted { $0.box.minY < $1.box.minY }
+        for button in ordered {
+            let nearestID = idObs.min {
+                abs($0.box.midY - button.box.midY) < abs($1.box.midY - button.box.midY)
+            }?.id
+            let key = nearestID ?? String(format: "pos:%.3f", button.box.midY)
+            if clickedIDs.contains(key) { continue }
+            markClicked(key)
+
+            let point = CGPoint(
+                x: frame.minX + button.box.midX * frame.width,
+                y: frame.minY + (1 - button.box.midY) * frame.height
+            )
+            guard frame.insetBy(dx: -4, dy: -4).contains(point) else { continue }
+
+            onLog?(.info, String(format: "Auto-clicking Join button at (%.0f, %.0f)", point.x, point.y))
+            clicker.click(at: point)
+            return // one click per frame
+        }
+    }
+
+    private func markClicked(_ key: String) {
+        guard clickedIDs.insert(key).inserted else { return }
+        clickedOrder.append(key)
+        if clickedOrder.count > Self.maxSeenLinks {
+            clickedIDs.remove(clickedOrder.removeFirst())
+        }
+    }
+
+    nonisolated(unsafe) private static let messageIDRegex =
+        #/ID:\s*(\d{6,})/#
+        .ignoresCase()
 
     /// Records a link as handled, evicting the oldest entries past the cap.
     private func markSeen(_ key: String) {
