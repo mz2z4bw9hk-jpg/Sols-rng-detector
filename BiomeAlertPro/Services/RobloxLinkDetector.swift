@@ -69,20 +69,43 @@ struct RobloxLinkDetector: LinkDetecting {
             }
         }
 
-        // Joinable links first.
-        return links.sorted { lhs, rhs in
+        // Joinable links first, with truncated-code duplicates removed.
+        return Self.pruneTruncatedCodes(links).sorted { lhs, rhs in
             (lhs.isJoinable ? 0 : 1) < (rhs.isJoinable ? 0 : 1)
+        }
+    }
+
+    /// Removes links whose code is a strict prefix of another link's code of
+    /// the same kind. OCR line-wrapping can yield both a truncated fragment
+    /// ("d0dd961f6db0e947…") and the full code — only the full one is a real,
+    /// joinable link; launching the fragment produces a 404.
+    static func pruneTruncatedCodes(_ links: [RobloxLink]) -> [RobloxLink] {
+        links.filter { candidate in
+            guard let code = candidate.linkCode else { return true }
+            let isTruncated = links.contains { other in
+                other.kind == candidate.kind
+                    && other.linkCode != nil
+                    && other.linkCode != code
+                    && other.linkCode!.count > code.count
+                    && other.linkCode!.hasPrefix(code)
+            }
+            return !isTruncated
         }
     }
 
     // MARK: - Patterns
 
+    // Code charsets are deliberately strict so OCR-reassembled text can't
+    // glue trailing words onto a code (which produced broken 404 links):
+    // private-server link codes are decimal digits (32 today; {10,32} keeps
+    // the first 32 even if extra digits get glued on), share codes are
+    // exactly 32 hex characters.
     nonisolated(unsafe) private static let privateServerRegex =
-        #/https?://(?:www\.|web\.)?roblox\.com/games/(\d{1,15})[^\s<>"']*?[?&]privateServerLinkCode=([A-Za-z0-9_-]{4,128})/#
+        #/https?://(?:www\.|web\.)?roblox\.com/games/(\d{1,15})[^\s<>"']*?[?&]privateServerLinkCode=(\d{10,32})/#
         .ignoresCase()
 
     nonisolated(unsafe) private static let shareLinkRegex =
-        #/https?://(?:www\.)?roblox\.com/share\?[^\s<>"']*?code=([A-Za-z0-9_-]{4,128})[^\s<>"']*/#
+        #/https?://(?:www\.)?roblox\.com/share\?[^\s<>"']*?code=([0-9a-fA-F]{32})[^\s<>"']*/#
         .ignoresCase()
 
     nonisolated(unsafe) private static let gameLinkRegex =
@@ -98,7 +121,7 @@ struct RobloxLinkDetector: LinkDetecting {
         .ignoresCase()
 
     nonisolated(unsafe) private static let deepLinkCodeRegex =
-        #/linkCode=([A-Za-z0-9_-]{4,128})/#
+        #/linkCode=(\d{10,32})/#
         .ignoresCase()
 
     nonisolated(unsafe) private static let jobIDRegex =

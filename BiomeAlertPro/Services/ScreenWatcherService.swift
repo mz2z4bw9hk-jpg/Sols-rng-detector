@@ -267,15 +267,21 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     private func handleRecognized(lines: [String]) {
         let joined = lines.joined(separator: "\n")
         // Long URLs wrap across lines and OCR can inject spaces into digit
-        // runs — a whitespace-stripped pass reassembles them.
+        // runs — a whitespace-stripped pass reassembles them. That pass sees
+        // the FULL code, so it goes first; the line-based pass can only add
+        // links the condensed pass missed. Truncated fragments (a wrapped
+        // code's first half) are pruned so they can never launch a 404.
         let condensed = joined.filter { !$0.isWhitespace }
 
-        var links = linkDetector.detect(in: joined)
-        for link in linkDetector.detect(in: condensed) where !links.contains(link) {
+        var links = linkDetector.detect(in: condensed)
+        for link in linkDetector.detect(in: joined) where !links.contains(link) {
             links.append(link)
         }
+        links = RobloxLinkDetector.pruneTruncatedCodes(links)
 
-        let candidates = links.filter { $0.isJoinable && !seenLinks.contains($0.dedupeKey) }
+        let candidates = links.filter {
+            $0.isJoinable && !seenLinks.contains($0.dedupeKey) && !isFragmentOfSeenLink($0)
+        }
         guard !candidates.isEmpty else { return }
 
         // Prime on the first pass: everything already on screen is recorded as
@@ -318,6 +324,15 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
             content: String(content.prefix(1_500))
         ))
         onLog?(.info, "Screen watcher spotted \(fresh.count) new Roblox link(s)")
+    }
+
+    /// Whether this link's code is a truncated fragment of a code we already
+    /// handled (the full code scrolled off screen but its first half is still
+    /// visible on a wrapped line). Launching the fragment would 404.
+    private func isFragmentOfSeenLink(_ link: RobloxLink) -> Bool {
+        guard let code = link.linkCode else { return false }
+        let key = "code:" + code
+        return seenLinks.contains { $0.hasPrefix(key) && $0 != key }
     }
 
     /// Records a link as handled, evicting the oldest entries past the cap.
