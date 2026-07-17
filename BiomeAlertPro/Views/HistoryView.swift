@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Searchable, sortable, exportable alert history.
@@ -138,6 +139,18 @@ private struct HistoryContent: View {
             .width(min: 70, ideal: 80)
         }
         .contextMenu(forSelectionType: UUID.self) { ids in
+            if ids.count == 1,
+               let record = environment.history.records.first(where: { ids.contains($0.id) }),
+               let link = record.robloxLink {
+                Button("Copy Roblox Link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(link, forType: .string)
+                }
+                Button("Join Again") {
+                    environment.launchLink(link)
+                }
+                Divider()
+            }
             Button("Delete", role: .destructive) {
                 environment.history.delete(ids: ids)
             }

@@ -39,7 +39,23 @@ struct RobloxLinkDetector: LinkDetecting {
             ))
         }
 
-        // 2. roblox:// deep links.
+        // 2. Join-helper / redirect URLs carrying placeId + link_code params
+        // (e.g. the hidden URL behind a "Click to Join Server" hyperlink:
+        // https://join-rbx.example/private?placeId=…&link_code=…). These carry
+        // everything needed for a direct roblox:// deep link — no browser hop.
+        for match in text.matches(of: Self.anyURLRegex) {
+            let raw = Self.cleanURL(String(match.output))
+            let lowered = raw.lowercased()
+            guard lowered.contains("placeid="),
+                  lowered.contains("link_code=") || lowered.contains("linkcode="),
+                  !lowered.contains("roblox.com/games/") else { continue }
+            guard let placeID = Self.firstCapture(of: Self.urlPlaceIDRegex, in: raw),
+                  let code = Self.firstCapture(of: Self.urlLinkCodeRegex, in: raw),
+                  Self.isValidPlaceID(placeID) else { continue }
+            append(RobloxLink(kind: .privateServer, original: raw, placeID: placeID, linkCode: code, jobID: nil))
+        }
+
+        // 2.5 roblox:// deep links.
         for match in text.matches(of: Self.deepLinkRegex) {
             let raw = Self.cleanURL(String(match.output))
             let placeID = Self.firstCapture(of: Self.deepLinkPlaceIDRegex, in: raw)
@@ -69,9 +85,13 @@ struct RobloxLinkDetector: LinkDetecting {
             }
         }
 
-        // Joinable links first, with truncated-code duplicates removed.
+        // Ranking: joinable first, and among joinable prefer links that can
+        // launch via a direct roblox:// deep link (no browser hop) — e.g. a
+        // join-helper URL with placeId+code beats a share link.
         return Self.pruneTruncatedCodes(links).sorted { lhs, rhs in
-            (lhs.isJoinable ? 0 : 1) < (rhs.isJoinable ? 0 : 1)
+            let lhsKey = (lhs.isJoinable ? 0 : 1, lhs.deepLinkURL != nil ? 0 : 1)
+            let rhsKey = (rhs.isJoinable ? 0 : 1, rhs.deepLinkURL != nil ? 0 : 1)
+            return lhsKey < rhsKey
         }
     }
 
@@ -114,6 +134,18 @@ struct RobloxLinkDetector: LinkDetecting {
 
     nonisolated(unsafe) private static let deepLinkRegex =
         #/roblox://[^\s<>"']+/#
+        .ignoresCase()
+
+    nonisolated(unsafe) private static let anyURLRegex =
+        #/https?://[^\s<>"']+/#
+        .ignoresCase()
+
+    nonisolated(unsafe) private static let urlPlaceIDRegex =
+        #/[?&]placeId=(\d{1,15})/#
+        .ignoresCase()
+
+    nonisolated(unsafe) private static let urlLinkCodeRegex =
+        #/[?&]link_?code=(\d{10,32})/#
         .ignoresCase()
 
     nonisolated(unsafe) private static let deepLinkPlaceIDRegex =
