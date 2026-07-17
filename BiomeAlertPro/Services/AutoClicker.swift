@@ -21,9 +21,10 @@ final class AutoClicker: @unchecked Sendable {
     /// Prompts the user to grant Accessibility permission (opens the system
     /// dialog / Settings pane). Safe to call repeatedly.
     static func requestAccessibilityPermission() {
-        // kAXTrustedCheckOptionPrompt is imported as Unmanaged<CFString>.
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+        // Use the literal key value ("AXTrustedCheckOptionPrompt") to avoid
+        // referencing the non-Sendable global constant under Swift 6.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     /// Left-clicks at `point`, then restores the cursor to where it was so the
