@@ -268,11 +268,23 @@ actor DiscordGatewayService {
             if let title = embed["title"] as? String { embedParts.append(title) }
             if let description = embed["description"] as? String { embedParts.append(description) }
             if let url = embed["url"] as? String { embedParts.append(url) }
+            if let authorURL = (embed["author"] as? [String: Any])?["url"] as? String { embedParts.append(authorURL) }
             for field in (embed["fields"] as? [[String: Any]]) ?? [] {
                 if let name = field["name"] as? String { embedParts.append(name) }
                 if let value = field["value"] as? String { embedParts.append(value) }
             }
         }
+
+        // Link buttons: a "Click to Join Server" button is often a link-style
+        // component (type 2, style 5) whose `url` is the real join URL —
+        // extract those so the join-helper parser can turn them into a
+        // direct roblox:// launch.
+        for row in (message["components"] as? [[String: Any]]) ?? [] {
+            for component in (row["components"] as? [[String: Any]]) ?? [] {
+                if let url = component["url"] as? String { embedParts.append(url) }
+            }
+        }
+
         let embedText = embedParts.joined(separator: "\n")
         guard !content.isEmpty || !embedText.isEmpty else { return }
 
