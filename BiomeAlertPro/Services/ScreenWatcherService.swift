@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -304,9 +305,14 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         let observations = request.results ?? []
         let lines = observations.compactMap { $0.topCandidates(1).first?.string }
         guard !lines.isEmpty else { return }
-        handleRecognized(lines: lines)
+
         if clicking {
+            // Click-only: the visible share link is the stale original message
+            // (that's the 404). Do NOT launch anything from OCR here — the
+            // click on the Join button opens the real, fresh link.
             handleClickToJoin(observations: observations)
+        } else {
+            handleRecognized(lines: lines)
         }
     }
 
@@ -386,8 +392,12 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     /// Locates a new "Click to Join Server" button and clicks it. Dedupes by
     /// the message's visible "ID: <n>" line so a given alert is clicked once.
     private func handleClickToJoin(observations: [VNRecognizedTextObservation]) {
-        let frame = currentWindowFrame()
-        guard frame.width > 1, frame.height > 1 else { return }
+        // Use the live on-screen Discord window rect (handles a moved/resized
+        // window). If Discord isn't visible on the active desktop there's
+        // nothing safe to click, so bail rather than click a wrong spot.
+        guard let frame = Self.liveDiscordWindowBounds(), frame.width > 1, frame.height > 1 else {
+            return
+        }
 
         struct Obs { let text: String; let box: CGRect }
         let obs = observations.compactMap { o -> Obs? in
@@ -457,6 +467,35 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     nonisolated(unsafe) private static let messageIDRegex =
         #/ID:\s*(\d{6,})/#
         .ignoresCase()
+
+    /// The current on-screen bounds of the largest Discord window, in global
+    /// top-left-origin points (what CGEvent clicks expect). nil if none is
+    /// visible on the active desktop.
+    static func liveDiscordWindowBounds() -> CGRect? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        var best: CGRect?
+        var bestArea: CGFloat = 0
+        for info in infoList {
+            guard let owner = info[kCGWindowOwnerName as String] as? String,
+                  owner.lowercased().contains("discord"),
+                  (info[kCGWindowLayer as String] as? Int) == 0,
+                  let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
+                  let x = (boundsDict["X"] as? NSNumber)?.doubleValue,
+                  let y = (boundsDict["Y"] as? NSNumber)?.doubleValue,
+                  let w = (boundsDict["Width"] as? NSNumber)?.doubleValue,
+                  let h = (boundsDict["Height"] as? NSNumber)?.doubleValue,
+                  w > 300, h > 200 else { continue }
+            let area = CGFloat(w * h)
+            if area > bestArea {
+                bestArea = area
+                best = CGRect(x: x, y: y, width: w, height: h)
+            }
+        }
+        return best
+    }
 
     /// Records a link as handled, evicting the oldest entries past the cap.
     private func markSeen(_ key: String) {
