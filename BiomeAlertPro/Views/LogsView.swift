@@ -82,8 +82,8 @@ private struct LogRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: entry.level.symbolName)
-                .foregroundStyle(entry.level.tint)
+            Image(systemName: entry.symbol ?? entry.level.symbolName)
+                .foregroundStyle(entry.symbol != nil ? Color.accentColor : entry.level.tint)
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {

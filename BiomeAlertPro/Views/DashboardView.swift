@@ -28,6 +28,7 @@ private struct DashboardContent: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 heroSection
+                readinessSection
                 statusSection
                 statsSection
                 systemSection
@@ -43,6 +44,78 @@ private struct DashboardContent: View {
                     Label("Test Alert", systemImage: "bell.badge")
                 }
                 .help("Send a synthetic alert through the full detection pipeline")
+            }
+        }
+    }
+
+    // MARK: - Readiness
+
+    @State private var readinessRefresh = 0
+
+    private var readinessSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                readinessRow(
+                    ok: SystemPermissions.screenRecording,
+                    title: "Screen Recording",
+                    detail: "Required for the screen watcher",
+                    fix: { SystemPermissions.openScreenRecordingSettings() }
+                )
+                Divider()
+                readinessRow(
+                    ok: SystemPermissions.accessibility,
+                    title: "Accessibility",
+                    detail: "Required for auto-clicking the Join button",
+                    fix: { SystemPermissions.openAccessibilitySettings() }
+                )
+                Divider()
+                readinessRow(
+                    ok: environment.notificationsAuthorized,
+                    title: "Notifications",
+                    detail: "Biome alerts on screen",
+                    fix: nil
+                )
+                Divider()
+                readinessRow(
+                    ok: environment.launcher.isRobloxInstalled,
+                    title: "Roblox installed",
+                    detail: "Direct roblox:// launches (else browser fallback)",
+                    fix: nil
+                )
+            }
+            .padding(6)
+            .id(readinessRefresh)
+        } label: {
+            HStack {
+                SectionTitle(title: "Readiness", systemImage: "checklist")
+                Spacer()
+                Button {
+                    readinessRefresh += 1
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Re-check permissions")
+            }
+        }
+    }
+
+    private func readinessRow(ok: Bool, title: String, detail: String, fix: (() -> Void)?) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(ok ? .green : .orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !ok, let fix {
+                Button("Open Settings", action: fix)
+                    .controlSize(.small)
+            } else {
+                Text(ok ? "Ready" : "Not set")
+                    .font(.caption)
+                    .foregroundStyle(ok ? .green : .orange)
             }
         }
     }

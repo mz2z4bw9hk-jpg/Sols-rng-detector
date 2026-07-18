@@ -63,12 +63,15 @@ struct LogEntry: Codable, Identifiable, Hashable, Sendable {
     let level: LogLevel
     let category: LogCategory
     let message: String
+    /// Optional custom SF Symbol (e.g. a biome's icon) shown instead of the level icon.
+    let symbol: String?
 
-    init(id: UUID = UUID(), date: Date = Date(), level: LogLevel, category: LogCategory, message: String) {
+    init(id: UUID = UUID(), date: Date = Date(), level: LogLevel, category: LogCategory, message: String, symbol: String? = nil) {
         self.id = id
         self.date = date
         self.level = level
         self.category = category
         self.message = message
+        self.symbol = symbol
     }
 }

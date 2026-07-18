@@ -207,6 +207,7 @@ private struct SettingsContent: View {
                 }
             LabeledContent("Join last detected link", value: HotKeyService.joinLastDescription)
             LabeledContent("Pause / resume monitoring", value: HotKeyService.togglePauseDescription)
+            LabeledContent("Click newest Join button now", value: HotKeyService.clickNewestDescription)
         } header: {
             Text("Hotkeys")
         } footer: {

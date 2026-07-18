@@ -75,7 +75,6 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     private var windowFrameValue: CGRect = .zero
 
     // Click state, accessed only on `sampleQueue`.
-    private let clicker = AutoClicker()
     private var clickedIDs: Set<String> = []
     private var clickedOrder: [String] = []
     private var clickPrimed = false
@@ -114,22 +113,44 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         return clickToJoin
     }
 
-    /// Normalized biome keywords a Join button's message must contain for the
-    /// app to click it. Empty means "no biomes selected" → nothing is clicked.
-    private var biomeTargets: Set<String> = []
+    /// Normalized biome keyword → biome display name. A Join button's message
+    /// must contain one of these keywords to be clicked. Empty means "no
+    /// biomes selected" → nothing is clicked.
+    private var biomeTargets: [String: String] = [:]
+    /// Requests a one-off click of the newest targeted button on the next frame.
+    private var forceClickRequested = false
 
-    func setBiomeClickTargets(_ keywords: [String]) {
-        let normalized = keywords.map { KeywordEngine.normalize($0) }.filter { !$0.isEmpty }
+    /// - Parameter map: normalized keyword → biome display name.
+    func setBiomeClickTargets(_ map: [String: String]) {
+        var normalized: [String: String] = [:]
+        for (keyword, biome) in map {
+            let key = KeywordEngine.normalize(keyword)
+            if !key.isEmpty { normalized[key] = biome }
+        }
         lock.lock()
-        biomeTargets = Set(normalized)
+        biomeTargets = normalized
         lock.unlock()
     }
 
-    private func currentBiomeTargets() -> Set<String> {
+    private func currentBiomeTargets() -> [String: String] {
         lock.lock()
         defer { lock.unlock() }
         return biomeTargets
     }
+
+    /// Manual trigger (hotkey): forces the next frame to click the newest
+    /// targeted Join button, even if it was already handled.
+    func requestManualClick() {
+        sampleQueue.async { [weak self] in
+            self?.forceClickRequested = true
+            self?.lastFrameHash = 0 // force the next frame to be OCR'd
+        }
+    }
+
+    /// Called when the watcher wants a Join button pressed. The environment
+    /// brings Discord to the front (if needed), clicks, and gives feedback.
+    /// Parameters: click point (global, top-left points) and biome display name.
+    var onClickRequest: (@Sendable (CGPoint, String) -> Void)?
 
     private func setWindowFrame(_ frame: CGRect) {
         lock.lock()
@@ -223,7 +244,9 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
                 onState?(.failed("Needs Screen Recording permission (System Settings → Privacy & Security → Screen Recording), then relaunch"))
                 onLog?(.warning, "Screen capture unavailable: \(error.localizedDescription)")
             }
-            try? await Task.sleep(for: .seconds(10))
+            // Auto-recover: keep re-scanning so a closed/reopened Discord (or a
+            // just-granted permission) is picked up without restarting the app.
+            try? await Task.sleep(for: .seconds(5))
         }
     }
 
@@ -443,6 +466,10 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         }
         guard !buttons.isEmpty else { return }
 
+        // Manual hotkey: click the newest targeted button once, ignoring dedupe.
+        let manual = forceClickRequested
+        forceClickRequested = false
+
         // Only click buttons whose message names a biome the user selected.
         let targets = currentBiomeTargets()
         guard !targets.isEmpty else {
@@ -468,13 +495,13 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
                 abs($0.box.midY - button.box.midY) < abs($1.box.midY - button.box.midY)
             }?.id
             let key = nearestID ?? String(format: "pos:%.3f", button.box.midY)
-            if clickedIDs.contains(key) { continue }
+            if !manual, clickedIDs.contains(key) { continue }
 
             // Classify this button's message by the text around it; skip
             // (without marking seen, so a later frame can re-check) if it isn't
             // a targeted biome.
             let context = Self.contextAround(button: button.box, in: obs)
-            guard let biome = targets.first(where: { context.contains($0) }) else { continue }
+            guard let biome = targets.first(where: { context.contains($0.key) })?.value else { continue }
 
             markClicked(key)
 
@@ -484,8 +511,9 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
             )
             guard frame.insetBy(dx: -4, dy: -4).contains(point) else { continue }
 
-            onLog?(.info, String(format: "Auto-clicking Join button for “%@” at (%.0f, %.0f)", biome, point.x, point.y))
-            clicker.click(at: point)
+            onLog?(.info, String(format: "%@ Join button for “%@” at (%.0f, %.0f)",
+                                 manual ? "Manually clicking" : "Auto-clicking", biome, point.x, point.y))
+            onClickRequest?(point, biome)
             return // one click per frame
         }
     }

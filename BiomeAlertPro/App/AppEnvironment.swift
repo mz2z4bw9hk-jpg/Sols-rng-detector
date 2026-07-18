@@ -24,6 +24,7 @@ final class AppEnvironment: ObservableObject {
     let gateway: DiscordGatewayService
     let screenWatcher: ScreenWatcherService
     let hotKeys = HotKeyService()
+    let autoClicker = AutoClicker()
 
     private var pipeline: AlertPipeline?
     private var bootstrapped = false
@@ -134,6 +135,11 @@ final class AppEnvironment: ObservableObject {
                 self?.logs.log(level, .detection, message)
             }
         }
+        screenWatcher.onClickRequest = { [weak self] point, biome in
+            Task { @MainActor in
+                self?.performJoinClick(at: point, biome: biome)
+            }
+        }
 
         // Gateway callbacks.
         Task {
@@ -182,6 +188,9 @@ final class AppEnvironment: ObservableObject {
         hotKeys.onTogglePause = { [weak self] in
             Task { @MainActor in self?.toggleMonitoring() }
         }
+        hotKeys.onClickNewest = { [weak self] in
+            Task { @MainActor in self?.screenWatcher.requestManualClick() }
+        }
         applyHotkeySetting()
 
         if settings.listenerEnabled || botTokenConfigured || settings.screenWatcherEnabled {
@@ -216,7 +225,7 @@ final class AppEnvironment: ObservableObject {
         }
         if settings.screenWatcherEnabled {
             screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
-            screenWatcher.setBiomeClickTargets(screenWatcherBiomeKeywords())
+            screenWatcher.setBiomeClickTargets(screenWatcherBiomeTargets())
             screenWatcher.setClickToJoin(settings.autoClickJoinEnabled)
             screenWatcher.start()
         }
@@ -225,20 +234,20 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Keywords (per enabled auto-launch biome) that a Join button's message
-    /// must contain for the screen-watcher click mode to press it.
-    func screenWatcherBiomeKeywords() -> [String] {
+    /// Map of keyword → biome display name (per enabled auto-launch biome)
+    /// that the screen-watcher click mode uses to classify a Join button's
+    /// message and decide whether to press it.
+    func screenWatcherBiomeTargets() -> [String: String] {
         let enabled = KeywordCategory.allCases.filter { $0.isBiome && settings.isBiomeAutoLaunchEnabled($0) }
-        guard !enabled.isEmpty else { return [] }
-        var words: [String] = []
+        var map: [String: String] = [:]
         for category in enabled {
-            words.append(category.rawValue)     // e.g. "singularity"
-            words.append(category.displayName)  // e.g. "Singularity"
+            map[category.rawValue] = category.displayName
+            map[category.displayName] = category.displayName
             for keyword in keywords.enabledKeywords where keyword.category == category {
-                words.append(keyword.text)
+                map[keyword.text] = category.displayName
             }
         }
-        return words
+        return map
     }
 
     func stopMonitoring() {
@@ -267,6 +276,59 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
+    /// Presses a Join button the screen watcher located: brings Discord to the
+    /// front if it isn't already (so the click lands), clicks, then records
+    /// feedback — biome sound, notification, and an Alert History entry.
+    func performJoinClick(at point: CGPoint, biome: String) {
+        let discord = NSWorkspace.shared.runningApplications.first {
+            $0.bundleIdentifier?.lowercased().contains("discord") == true
+        }
+        let discordIsFront = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == discord?.bundleIdentifier
+
+        if discordIsFront || discord == nil {
+            autoClicker.click(at: point)
+            recordClickFeedback(biome: biome)
+        } else {
+            // Raise Discord, then click once its window is frontmost.
+            discord?.activate(options: [])
+            let clicker = autoClicker
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                clicker.click(at: point)
+                self?.recordClickFeedback(biome: biome)
+            }
+        }
+    }
+
+    private func recordClickFeedback(biome: String) {
+        let category = KeywordCategory.allCases.first { $0.displayName == biome }
+        let isRare = category?.isRare ?? false
+        let record = AlertRecord(
+            source: "Screen Watcher (click)",
+            sender: nil,
+            content: "Clicked “Click to Join Server” for \(biome)",
+            matchedKeywords: [biome],
+            biome: biome,
+            isRareBiome: isRare,
+            confidence: 1.0,
+            robloxLink: nil,
+            linkKind: "Join button",
+            latencyMs: 0,
+            launchStatus: .launched
+        )
+        history.add(record)
+        stats.recordAlert(record: record)
+        stats.recordLaunch()
+
+        if settings.soundEnabled {
+            sounds.play(named: settings.sound(forBiomeDisplayName: biome))
+        }
+        if settings.notificationsEnabled {
+            let playOwnSound = settings.soundEnabled
+            Task { await notifications.postAlert(record: record, link: nil, useSystemSound: !playOwnSound) }
+        }
+        logs.log(.info, .launch, "Joined \(biome) via on-screen button", symbol: category?.symbolName)
+    }
+
     /// Joins the most recently detected joinable link (hotkey / menu action).
     func joinLastLink() {
         guard let link = lastJoinableLink else {
@@ -282,7 +344,7 @@ final class AppEnvironment: ObservableObject {
     /// Applies the screen-watcher toggle immediately while monitoring.
     func applyScreenWatcherSetting() {
         screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
-        screenWatcher.setBiomeClickTargets(screenWatcherBiomeKeywords())
+        screenWatcher.setBiomeClickTargets(screenWatcherBiomeTargets())
         screenWatcher.setClickToJoin(settings.autoClickJoinEnabled)
         guard isMonitoring else { return }
         if settings.screenWatcherEnabled {
@@ -398,8 +460,12 @@ final class AppEnvironment: ObservableObject {
         stats.recordAlert(record: delivered)
 
         let summary = delivered.biome.map { "\($0) biome" } ?? "Alert"
+        let biomeSymbol = delivered.biome.flatMap { name in
+            KeywordCategory.allCases.first { $0.displayName == name }?.symbolName
+        }
         logs.log(.info, .detection, String(format: "%@ detected via %@ (confidence %.2f, %.0f ms)",
-                                           summary, delivered.source, delivered.confidence, delivered.latencyMs))
+                                           summary, delivered.source, delivered.confidence, delivered.latencyMs),
+                 symbol: biomeSymbol)
 
         if settings.notificationsEnabled {
             let playOwnSound = settings.soundEnabled

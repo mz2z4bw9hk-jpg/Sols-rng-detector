@@ -131,8 +131,9 @@ private struct SourcesContent: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Label("Discord must be the visible, front window — the click lands wherever the button is on screen.", systemImage: "exclamationmark.circle")
-                Label("Experimental: if it clicks the wrong spot, turn it off and check Logs for the coordinates so it can be calibrated.", systemImage: "wrench.and.screwdriver")
+                Label("The app brings Discord to the front automatically before clicking — just keep it on the current desktop (not another Space).", systemImage: "macwindow.on.rectangle")
+                Label("Only clicks buttons for biomes selected in Settings → Auto-Launch Biomes.", systemImage: "target")
+                Label("⌥⌘K clicks the newest targeted button on demand. If it ever clicks the wrong spot, check Logs for the coordinates.", systemImage: "keyboard")
             }
             .font(.caption2)
             .foregroundStyle(.secondary)

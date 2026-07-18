@@ -21,9 +21,9 @@ final class LogStore: ObservableObject {
         rotateFileIfNeeded()
     }
 
-    func log(_ level: LogLevel, _ category: LogCategory, _ message: String) {
+    func log(_ level: LogLevel, _ category: LogCategory, _ message: String, symbol: String? = nil) {
         guard level >= minimumLevel else { return }
-        let entry = LogEntry(level: level, category: category, message: message)
+        let entry = LogEntry(level: level, category: category, message: message, symbol: symbol)
         entries.append(entry)
         if entries.count > maxEntries {
             entries.removeFirst(entries.count - maxEntries)

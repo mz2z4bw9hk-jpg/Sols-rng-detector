@@ -13,11 +13,13 @@ final class HotKeyService: @unchecked Sendable {
     enum Action: UInt32 {
         case joinLast = 1
         case togglePause = 2
+        case clickNewest = 3
     }
 
     /// Invoked on the main actor when a hotkey fires.
     var onJoinLast: (@Sendable () -> Void)?
     var onTogglePause: (@Sendable () -> Void)?
+    var onClickNewest: (@Sendable () -> Void)?
 
     private var eventHandler: EventHandlerRef?
     private var hotKeyRefs: [EventHotKeyRef?] = []
@@ -28,11 +30,13 @@ final class HotKeyService: @unchecked Sendable {
     private static let option: UInt32 = UInt32(optionKey)
     private static let keyJ: UInt32 = 0x26 // kVK_ANSI_J
     private static let keyP: UInt32 = 0x23 // kVK_ANSI_P
+    private static let keyK: UInt32 = 0x28 // kVK_ANSI_K
     private static let signature = fourCharCode("BAPx")
 
     /// Human-readable descriptions for the UI.
     static let joinLastDescription = "⌥⌘J"
     static let togglePauseDescription = "⌥⌘P"
+    static let clickNewestDescription = "⌥⌘K"
 
     func register() {
         guard !installed else { return }
@@ -67,6 +71,7 @@ final class HotKeyService: @unchecked Sendable {
 
         registerHotKey(id: Action.joinLast.rawValue, keyCode: Self.keyJ, modifiers: Self.cmd | Self.option)
         registerHotKey(id: Action.togglePause.rawValue, keyCode: Self.keyP, modifiers: Self.cmd | Self.option)
+        registerHotKey(id: Action.clickNewest.rawValue, keyCode: Self.keyK, modifiers: Self.cmd | Self.option)
         installed = true
     }
 
@@ -104,6 +109,7 @@ final class HotKeyService: @unchecked Sendable {
         switch Action(rawValue: id) {
         case .joinLast: onJoinLast?()
         case .togglePause: onTogglePause?()
+        case .clickNewest: onClickNewest?()
         case .none: break
         }
     }
