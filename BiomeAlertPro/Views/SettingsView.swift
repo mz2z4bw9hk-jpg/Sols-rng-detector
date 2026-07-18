@@ -38,7 +38,10 @@ private struct SettingsContent: View {
             ForEach(KeywordCategory.allCases.filter(\.isBiome)) { category in
                 Toggle(isOn: Binding(
                     get: { settings.isBiomeAutoLaunchEnabled(category) },
-                    set: { enabled in settings.setBiomeAutoLaunch(category, enabled: enabled) }
+                    set: { enabled in
+                        settings.setBiomeAutoLaunch(category, enabled: enabled)
+                        environment.applyScreenWatcherSetting()
+                    }
                 )) {
                     Label {
                         HStack(spacing: 6) {

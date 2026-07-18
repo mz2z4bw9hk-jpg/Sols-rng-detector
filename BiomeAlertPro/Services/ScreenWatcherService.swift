@@ -80,6 +80,7 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
     private var clickedOrder: [String] = []
     private var clickPrimed = false
     private var warnedNoAccessibility = false
+    private var warnedNoBiomeTargets = false
 
     private static let maxSeenLinks = 800
 
@@ -111,6 +112,23 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return clickToJoin
+    }
+
+    /// Normalized biome keywords a Join button's message must contain for the
+    /// app to click it. Empty means "no biomes selected" → nothing is clicked.
+    private var biomeTargets: Set<String> = []
+
+    func setBiomeClickTargets(_ keywords: [String]) {
+        let normalized = keywords.map { KeywordEngine.normalize($0) }.filter { !$0.isEmpty }
+        lock.lock()
+        biomeTargets = Set(normalized)
+        lock.unlock()
+    }
+
+    private func currentBiomeTargets() -> Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
+        return biomeTargets
     }
 
     private func setWindowFrame(_ frame: CGRect) {
@@ -399,10 +417,9 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
             return
         }
 
-        struct Obs { let text: String; let box: CGRect }
-        let obs = observations.compactMap { o -> Obs? in
+        let obs: [(text: String, box: CGRect)] = observations.compactMap { o in
             guard let text = o.topCandidates(1).first?.string else { return nil }
-            return Obs(text: text, box: o.boundingBox)
+            return (text, o.boundingBox)
         }
 
         // Message IDs currently on screen (unique per message).
@@ -426,6 +443,16 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
         }
         guard !buttons.isEmpty else { return }
 
+        // Only click buttons whose message names a biome the user selected.
+        let targets = currentBiomeTargets()
+        guard !targets.isEmpty else {
+            if !warnedNoBiomeTargets {
+                warnedNoBiomeTargets = true
+                onLog?(.warning, "Auto-click found a Join button but no biomes are selected — enable biomes in Settings → Auto-Launch Biomes")
+            }
+            return
+        }
+
         guard AutoClicker.hasAccessibilityPermission else {
             if !warnedNoAccessibility {
                 warnedNoAccessibility = true
@@ -442,6 +469,13 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
             }?.id
             let key = nearestID ?? String(format: "pos:%.3f", button.box.midY)
             if clickedIDs.contains(key) { continue }
+
+            // Classify this button's message by the text around it; skip
+            // (without marking seen, so a later frame can re-check) if it isn't
+            // a targeted biome.
+            let context = Self.contextAround(button: button.box, in: obs)
+            guard let biome = targets.first(where: { context.contains($0) }) else { continue }
+
             markClicked(key)
 
             let point = CGPoint(
@@ -450,10 +484,17 @@ final class ScreenWatcherService: NSObject, @unchecked Sendable {
             )
             guard frame.insetBy(dx: -4, dy: -4).contains(point) else { continue }
 
-            onLog?(.info, String(format: "Auto-clicking Join button at (%.0f, %.0f)", point.x, point.y))
+            onLog?(.info, String(format: "Auto-clicking Join button for “%@” at (%.0f, %.0f)", biome, point.x, point.y))
             clicker.click(at: point)
             return // one click per frame
         }
+    }
+
+    /// Normalized text near a button (its message's header/body), used to
+    /// classify which biome the button belongs to.
+    private static func contextAround(button: CGRect, in obs: [(text: String, box: CGRect)]) -> String {
+        let near = obs.filter { abs($0.box.midY - button.midY) < 0.18 }
+        return KeywordEngine.normalize(near.map(\.text).joined(separator: " "))
     }
 
     private func markClicked(_ key: String) {

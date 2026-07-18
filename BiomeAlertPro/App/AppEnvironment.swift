@@ -216,12 +216,29 @@ final class AppEnvironment: ObservableObject {
         }
         if settings.screenWatcherEnabled {
             screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
+            screenWatcher.setBiomeClickTargets(screenWatcherBiomeKeywords())
             screenWatcher.setClickToJoin(settings.autoClickJoinEnabled)
             screenWatcher.start()
         }
         if settings.prewarmRoblox {
             launcher.prewarm()
         }
+    }
+
+    /// Keywords (per enabled auto-launch biome) that a Join button's message
+    /// must contain for the screen-watcher click mode to press it.
+    func screenWatcherBiomeKeywords() -> [String] {
+        let enabled = KeywordCategory.allCases.filter { $0.isBiome && settings.isBiomeAutoLaunchEnabled($0) }
+        guard !enabled.isEmpty else { return [] }
+        var words: [String] = []
+        for category in enabled {
+            words.append(category.rawValue)     // e.g. "singularity"
+            words.append(category.displayName)  // e.g. "Singularity"
+            for keyword in keywords.enabledKeywords where keyword.category == category {
+                words.append(keyword.text)
+            }
+        }
+        return words
     }
 
     func stopMonitoring() {
@@ -265,6 +282,7 @@ final class AppEnvironment: ObservableObject {
     /// Applies the screen-watcher toggle immediately while monitoring.
     func applyScreenWatcherSetting() {
         screenWatcher.setMaxLinkAgeSeconds(settings.screenWatcherMaxAgeSeconds)
+        screenWatcher.setBiomeClickTargets(screenWatcherBiomeKeywords())
         screenWatcher.setClickToJoin(settings.autoClickJoinEnabled)
         guard isMonitoring else { return }
         if settings.screenWatcherEnabled {
